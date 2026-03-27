@@ -1,0 +1,143 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Navigation from './components/Navigation';
+import TopBar from './components/TopBar';
+import QuickAddFAB from './components/QuickAddFAB';
+import Dashboard from './pages/Dashboard';
+import Tasks from './pages/Tasks';
+import Habits from './pages/Habits';
+import Analytics from './pages/Analytics';
+import Calendar from './pages/Calendar';
+import Notifications from './pages/Notifications';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+
+const Profile = () => <div className="p-8 text-[#e6edf3]">Profile Page Coming Soon</div>;
+const Settings = () => <div className="p-8 text-[#e6edf3]">Settings Page Coming Soon</div>;
+
+function ProtectedLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-[#080b12]">
+      <Navigation />
+      <div className="ml-64 flex flex-col min-h-screen">
+        <TopBar />
+        <main className="flex-1 relative">
+          {children}
+        </main>
+        <QuickAddFAB />
+      </div>
+    </div>
+  );
+}
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#080b12]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-[#7c79ff]/20 border-t-[#7c79ff] rounded-full animate-spin" />
+          <p className="text-[#8b949e] font-bold uppercase tracking-[0.2em] text-[11px] animate-pulse">Syncing Matrix...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <ProtectedLayout>{children}</ProtectedLayout>;
+}
+
+function AppRoutes() {
+  const { isAuthenticated } = useAuth();
+
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={isAuthenticated ? <Navigate to="/" replace /> : <Login />}
+      />
+      <Route
+        path="/signup"
+        element={isAuthenticated ? <Navigate to="/" replace /> : <Signup />}
+      />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tasks"
+        element={
+          <ProtectedRoute>
+            <Tasks />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/habits"
+        element={
+          <ProtectedRoute>
+            <Habits />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute>
+            <Analytics />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/calendar"
+        element={
+          <ProtectedRoute>
+            <Calendar />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <Notifications />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <Profile />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <Settings />
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
