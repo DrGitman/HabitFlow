@@ -1,0 +1,11 @@
+# Python local
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+
+# Database local backups
+*.sqlite3
+habitflow_backup.sql
