@@ -119,3 +119,26 @@ CREATE INDEX IF NOT EXISTS idx_habit_completions_user_id ON habit_completions(us
 CREATE INDEX IF NOT EXISTS idx_streaks_user_id ON streaks(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_activity_log_user_id ON activity_log(user_id);
+
+-- Achievements table (static data config)
+CREATE TABLE IF NOT EXISTS achievements (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    description TEXT,
+    type VARCHAR(50) NOT NULL, -- streak, task_count, consistency, goal_count
+    threshold_value INTEGER NOT NULL,
+    icon VARCHAR(50),
+    color VARCHAR(20),
+    rank_type VARCHAR(20) -- RARE, EPIC, COMMON
+);
+
+-- User achievements table
+CREATE TABLE IF NOT EXISTS user_achievements (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    achievement_id INTEGER REFERENCES achievements(id) ON DELETE CASCADE,
+    unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, achievement_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_achievements_user_id ON user_achievements(user_id);

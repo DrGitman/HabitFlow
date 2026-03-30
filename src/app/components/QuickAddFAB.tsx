@@ -49,7 +49,7 @@ export default function QuickAddFAB() {
       <motion.button
         onClick={() => setIsOpen(!isOpen)}
         className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all ${
-          isOpen ? 'bg-[#30363d] rotate-90' : 'bg-[#58a6ff] hover:bg-[#58a6ff]/90'
+          isOpen ? 'bg-[#30363d] rotate-90' : 'bg-[#7d79ff] hover:bg-[#7d79ff]/90'
         }`}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}

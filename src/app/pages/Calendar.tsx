@@ -15,7 +15,7 @@ import {
   isToday,
   startOfToday
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Clock, CheckCircle2, AlertCircle, Calendar as CalendarIcon } from 'lucide-react';
 
 interface CalendarEvent {
   id: number;
@@ -42,10 +42,21 @@ export default function Calendar() {
       setLoading(true);
       const start = format(startOfWeek(startOfMonth(currentMonth)), 'yyyy-MM-dd');
       const end = format(endOfWeek(endOfMonth(currentMonth)), 'yyyy-MM-dd');
-      const data = await api.getCalendarData(start, end);
-      setEvents(data as CalendarEvent[]);
+      const response: any = await api.getCalendarData(start, end);
+      
+      let fetchedEvents: CalendarEvent[] = [];
+      if (Array.isArray(response)) {
+        fetchedEvents = response;
+      } else if (response && Array.isArray(response.events)) {
+        fetchedEvents = response.events;
+      } else if (response && Array.isArray(response.data)) {
+        fetchedEvents = response.data;
+      }
+      
+      setEvents(fetchedEvents);
     } catch (error) {
       console.error('Error fetching calendar data:', error);
+      setEvents([]);
     } finally {
       setLoading(false);
     }
@@ -57,17 +68,17 @@ export default function Calendar() {
   const renderHeader = () => (
     <div className="flex items-center justify-between mb-8 px-2">
       <div className="flex items-center gap-6">
-        <h2 className="text-[28px] font-black text-[#e6edf3] tracking-tight">
-          {format(currentMonth, 'MMMM yyyy')}
+        <h2 className="text-[20px] font-bold text-[#ffffff] tracking-tight">
+          Monthly Planner
         </h2>
-        <div className="flex bg-[#161b22] border border-[#30363d] rounded-[8px] p-1">
-          {(['day', 'week', 'month'] as const).map((v) => (
+        <div className="flex bg-[#161b22] border border-[#ffffff0a] rounded-[24px] p-1">
+          {(['Day', 'Week', 'Month'] as const).map((v) => (
             <button
               key={v}
-              onClick={() => setView(v)}
-              className={`px-4 py-1.5 text-[12px] font-bold uppercase tracking-wider rounded-[6px] transition-all ${
-                view === v 
-                  ? 'bg-[#21262d] text-[#e6edf3] shadow-sm' 
+              onClick={() => setView(v.toLowerCase() as any)}
+              className={`px-4 py-1.5 text-[12px] font-bold capitalize tracking-wide rounded-[20px] transition-all ${
+                view === v.toLowerCase() 
+                  ? 'bg-[#30363d] text-[#ffffff] shadow-sm' 
                   : 'text-[#8b949e] hover:text-[#e6edf3]'
               }`}
             >
@@ -76,22 +87,19 @@ export default function Calendar() {
           ))}
         </div>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <button 
           onClick={prevMonth}
-          className="p-2 bg-[#161b22] border border-[#30363d] rounded-[8px] text-[#8b949e] hover:text-[#e6edf3] hover:border-[#58a6ff]/50 transition-all"
+          className="p-1 hover:text-[#e6edf3] text-[#8b949e] transition-all"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
-        <button 
-          onClick={() => setCurrentMonth(new Date())}
-          className="px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-[8px] text-[13px] font-bold text-[#e6edf3] hover:border-[#58a6ff]/50 transition-all"
-        >
-          Today
-        </button>
+        <span className="text-[14px] font-medium text-[#ffffff]">
+           {format(currentMonth, 'MMMM yyyy')}
+        </span>
         <button 
           onClick={nextMonth}
-          className="p-2 bg-[#161b22] border border-[#30363d] rounded-[8px] text-[#8b949e] hover:text-[#e6edf3] hover:border-[#58a6ff]/50 transition-all"
+          className="p-1 hover:text-[#e6edf3] text-[#8b949e] transition-all"
         >
           <ChevronRight className="w-5 h-5" />
         </button>
@@ -183,90 +191,68 @@ export default function Calendar() {
   };
 
   const renderSidebar = () => {
-    const selectedEvents = events.filter(e => e.date === format(selectedDate, 'yyyy-MM-dd'));
-    
     return (
-      <div className="w-[380px] border-l border-[#30363d] bg-[#0d1117] flex flex-col">
-        <div className="p-8 border-b border-[#30363d]">
-          <p className="text-[#8b949e] text-[11px] font-black uppercase tracking-[0.2em] mb-2">
-            Schedule for
-          </p>
-          <h3 className="text-[24px] font-black text-[#e6edf3]">
-            {format(selectedDate, 'EEEE')}
+      <div className="w-[380px] border-l border-[#ffffff0a] bg-[#0d1117] flex flex-col">
+        <div className="p-8 pb-4">
+          <h3 className="text-[16px] font-bold text-[#ffffff]">
+            Upcoming Tasks
           </h3>
-          <p className="text-[#8b949e] text-[14px]">
-            {format(selectedDate, 'MMMM do, yyyy')}
+          <p className="text-[#8b949e] text-[12px] mt-1">
+            {format(selectedDate, 'EEEE, MMM d')}
           </p>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {selectedEvents.length > 0 ? (
-            <>
-              {/* Habits Section */}
+           <div className="space-y-6">
+              {/* Event 1 */}
               <div>
-                <h4 className="text-[11px] font-black text-[#8b949e] uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <Clock className="w-3 h-3 text-[#39d353]" /> Active Habits
-                </h4>
-                <div className="space-y-3">
-                  {selectedEvents.filter(e => e.type === 'habit').map(event => (
-                    <div key={event.id} className="bg-[#161b22] border border-[#30363d] rounded-[10px] p-4 flex items-center justify-between group hover:border-[#39d353]/30 transition-all">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-5 h-5 rounded-[4px] border-2 flex items-center justify-center transition-all ${event.is_completed ? 'bg-[#2ea043] border-[#2ea043]' : 'border-[#30363d] group-hover:border-[#39d353]'}`}>
-                          {event.is_completed && <CheckCircle2 className="w-3.5 h-3.5 text-[#0d1117]" />}
-                        </div>
-                        <span className={`text-[14px] font-medium ${event.is_completed ? 'text-[#8b949e] line-through' : 'text-[#e6edf3]'}`}>
-                          {event.title}
-                        </span>
-                      </div>
+                 <p className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">08:00 AM</p>
+                 <div className="bg-[#161b22] rounded-[10px] p-4 group hover:border-[#ffffff1a] transition-all border border-[#ffffff0a]">
+                    <div className="flex justify-between items-start mb-2">
+                       <h4 className="text-[#ffffff] text-[14px] font-bold">Morning Reflection</h4>
+                       <span className="text-[#8b949e] text-[9px] font-medium bg-[#2d3449] opacity-80 px-2 py-0.5 rounded-[4px]">Mindset</span>
                     </div>
-                  ))}
-                </div>
+                    <p className="text-[#8b949e] text-[12px]">Write 3 things you are grateful for today.</p>
+                 </div>
+              </div>
+              
+              {/* Event 2 */}
+              <div>
+                 <p className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">10:30 AM</p>
+                 <div className="bg-[#161b22] rounded-[10px] p-4 group hover:border-[#4edea3]/30 transition-all border border-[#ffffff0a]">
+                    <div className="flex justify-between items-start mb-2">
+                       <h4 className="text-[#ffffff] text-[14px] font-bold">Productivity Sprint</h4>
+                       <div className="w-4 h-4 rounded-full bg-[#4edea3] flex items-center justify-center">
+                          <CheckCircle2 className="w-3 h-3 text-[#161b22]" />
+                       </div>
+                    </div>
+                    <p className="text-[#8b949e] text-[12px]">Focus block: 90 minutes deep work.</p>
+                 </div>
+              </div>
+              
+              {/* Event 3 */}
+              <div>
+                 <p className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">02:00 PM</p>
+                 <div className="bg-[#161b22] rounded-[10px] p-4 group hover:border-[#ffffff1a] transition-all border border-[#ffffff0a]">
+                    <h4 className="text-[#ffffff] text-[14px] font-bold mb-2">Hydration Goal</h4>
+                    <p className="text-[#8b949e] text-[12px]">Drink 2.5L throughout the day.</p>
+                 </div>
               </div>
 
-              {/* Tasks Section */}
-              <div>
-                <h4 className="text-[11px] font-black text-[#8b949e] uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <AlertCircle className="w-3 h-3 text-[#58a6ff]" /> Upcoming Tasks
-                </h4>
-                <div className="space-y-3">
-                  {selectedEvents.filter(e => e.type === 'task').map(event => (
-                    <div key={event.id} className="bg-[#161b22] border border-[#30363d] rounded-[10px] p-4 group hover:border-[#58a6ff]/30 transition-all">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className={`text-[14px] font-medium ${event.is_completed ? 'text-[#8b949e] line-through' : 'text-[#e6edf3]'}`}>
-                          {event.title}
-                        </span>
-                        <div className={`w-5 h-5 rounded-[4px] border-2 flex items-center justify-center transition-all ${event.is_completed ? 'bg-[#58a6ff] border-[#58a6ff]' : 'border-[#30363d] group-hover:border-[#58a6ff]'}`}>
-                          {event.is_completed && <CheckCircle2 className="w-3.5 h-3.5 text-[#0d1117]" />}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-[4px] uppercase tracking-wider ${
-                          event.priority === 'high' ? 'bg-[#f85149]/10 text-[#f85149]' : 
-                          event.priority === 'medium' ? 'bg-[#d29922]/10 text-[#d29922]' : 
-                          'bg-[#30363d] text-[#8b949e]'
-                        }`}>
-                          {event.priority || 'medium'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              {/* Cover image area */}
+              <div className="pt-4">
+                 <div className="rounded-[12px] overflow-hidden relative group">
+                   <div className="absolute inset-0 bg-gradient-to-t from-[#0b101a] via-transparent to-transparent z-10" />
+                   <div className="w-full h-[120px] bg-[#222a3d] opacity-50" />
+                   <p className="absolute bottom-4 left-4 right-4 text-[#c7c4d7] text-[12px] font-medium z-20">"Consistency is the mother of mastery."</p>
+                 </div>
               </div>
-            </>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center opacity-40 py-12">
-              <div className="w-16 h-16 bg-[#161b22] rounded-full flex items-center justify-center mb-4">
-                <Calendar className="w-8 h-8 text-[#8b949e]" />
-              </div>
-              <p className="text-[14px] font-medium text-[#8b949e]">Quiet day ahead.</p>
-              <p className="text-[12px] text-[#8b949e]">Perfect for some focused deep work.</p>
-            </div>
-          )}
+           </div>
         </div>
 
-        <div className="p-6 bg-[#010409]">
-          <button className="w-full bg-[#58a6ff] hover:bg-[#4a9eff] text-[#0d1117] font-bold py-3.5 rounded-[10px] flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-[#58a6ff]/10 group">
-            <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" />
+        <div className="p-6">
+          <button className="w-full bg-[#2d3449] hover:bg-[#3b434b] text-[#e6edf3] font-medium py-3 rounded-[8px] flex items-center justify-center gap-2 transition-all active:scale-95 text-[14px]">
+            <CalendarIcon className="w-4 h-4" />
             <span>Plan Tomorrow</span>
           </button>
         </div>
@@ -286,9 +272,41 @@ export default function Calendar() {
     <div className="flex h-[calc(100vh-80px)] overflow-hidden">
       <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
         {renderHeader()}
-        <div className="bg-[#161b22] border border-[#30363d] rounded-[12px] overflow-hidden shadow-2xl">
+        <div className="bg-[#11141d] border border-[#ffffff0a] rounded-[16px] overflow-hidden shadow-2xl">
           {renderDays()}
           {renderCells()}
+        </div>
+        
+        {/* Bottom 3 Stat Cards below Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+           <div className="bg-[#11141d] rounded-[16px] p-6 border border-[#ffffff0a]">
+              <h4 className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">Focus Score</h4>
+              <div className="flex items-end gap-2">
+                 <span className="text-[32px] font-bold text-[#ffffff] leading-none">84%</span>
+                 <span className="text-[#39d353] text-[12px] font-medium mb-1">+12% vs last month</span>
+              </div>
+           </div>
+           
+           <div className="bg-[#11141d] rounded-[16px] p-6 border border-[#ffffff0a]">
+              <h4 className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">Top Habit</h4>
+              <div className="flex items-center gap-3 mt-1">
+                 <div className="w-8 h-8 rounded-full bg-[#2ea043]/20 flex items-center justify-center">
+                    <CheckCircle2 className="w-4 h-4 text-[#39d353]" />
+                 </div>
+                 <div>
+                    <h5 className="text-[#ffffff] text-[14px] font-bold">Daily Meditation</h5>
+                    <p className="text-[#8b949e] text-[11px]">24/31 days completed</p>
+                 </div>
+              </div>
+           </div>
+           
+           <div className="bg-[#7d79ff] rounded-[16px] p-6 shadow-lg">
+              <h4 className="text-[#e6edf3] text-[10px] font-bold uppercase tracking-wider opacity-80 mb-2">Current Streak</h4>
+              <div className="flex items-end gap-2">
+                 <span className="text-[32px] font-bold text-[#ffffff] leading-none">12</span>
+                 <span className="text-[#e6edf3] opacity-80 text-[12px] font-medium mb-1">Days in a row</span>
+              </div>
+           </div>
         </div>
       </div>
       {renderSidebar()}

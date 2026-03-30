@@ -468,52 +468,39 @@ async def get_achievements(user_id: int = Depends(get_current_user_id)):
     if streaks:
         max_streak = max([s['current_streak'] for s in streaks])
     
-    achievements = []
+    all_achievements = execute_query("SELECT * FROM achievements")
     
-    if max_streak >= 30:
-        achievements.append({
-            "title": "30 Day Streak",
-            "desc": "Consistent discipline maintained for 30 consecutive calendar days.",
-            "type": "RARE",
-            "icon": "Flame",
-            "color": "#ff7b72"
-        })
-    elif max_streak >= 7:
-         achievements.append({
-            "title": "7 Day Streak",
-            "desc": "Maintain focus for a full week without breaking the chain.",
-            "type": "COMMON",
-            "icon": "Flame",
-            "color": "#ff7b72"
-        })
-
-    if summary['completed_tasks'] >= 100:
-        achievements.append({
-            "title": "Completed 100 Tasks",
-            "desc": "A significant milestone in productivity and execution.",
-            "type": "EPIC",
-            "icon": "Zap",
-            "color": "#7c79ff"
-        })
-    elif summary['completed_tasks'] >= 10:
-        achievements.append({
-            "title": "Productivity Pulse",
-            "desc": "You've successfully completed 10 tasks. Keep the momentum!",
-            "type": "COMMON",
-            "icon": "CheckCircle2",
-            "color": "#39d353"
-        })
-
-    if summary['completion_rate'] >= 90 and summary['total_habits'] >= 3:
-        achievements.append({
-            "title": "Early Bird Elite",
-            "desc": "High efficiency maintained across multiple habits.",
-            "type": "COMMON",
-            "icon": "Award",
-            "color": "#d29922"
-        })
-
-    return achievements
+    for ach in all_achievements:
+        unlocked = False
+        ach_type = ach.get('type')
+        thresh = ach.get('threshold_value', 0)
+        
+        if ach_type == 'streak':
+            if max_streak >= thresh:
+                unlocked = True
+        elif ach_type == 'task_count':
+            if summary['completed_tasks'] >= thresh:
+                unlocked = True
+        elif ach_type == 'consistency':
+            if summary['completion_rate'] >= thresh:
+                unlocked = True
+                
+        if unlocked:
+            execute_query("""
+                INSERT INTO user_achievements (user_id, achievement_id)
+                VALUES (%s, %s) ON CONFLICT (user_id, achievement_id) DO NOTHING
+            """, (user_id, ach['id']), fetch_all=False)
+            
+    # Fetch user's unlocked achievements mapped to UI fields
+    user_ach = execute_query("""
+        SELECT a.name as title, a.description as desc, a.rank_type as type, a.icon, a.color
+        FROM user_achievements ua
+        JOIN achievements a ON ua.achievement_id = a.id
+        WHERE ua.user_id = %s
+        ORDER BY ua.unlocked_at DESC
+    """, (user_id,))
+    
+    return user_ach
 
 if __name__ == "__main__":
     import uvicorn

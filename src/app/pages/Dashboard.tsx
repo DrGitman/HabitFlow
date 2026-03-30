@@ -106,7 +106,7 @@ export default function Dashboard() {
           <h2 className="text-[#ffffff] text-[24px] font-black tracking-[0.2em] leading-none uppercase mb-2">HABITFLOW</h2>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#39d353] shadow-[0_0_8px_rgba(57,211,83,0.5)]" />
-            <p className="text-[#8b949e] text-[11px] font-black uppercase tracking-[0.15em] opacity-60">Personal Excellence Protocol Active</p>
+            <p className="text-[#8b949e] text-[11px] font-black uppercase tracking-[0.15em] opacity-60">System Active</p>
           </div>
         </div>
         <div className="text-right flex flex-col items-end">
@@ -155,8 +155,8 @@ export default function Dashboard() {
         <div className="lg:col-span-2 bg-[#161b22]/50 backdrop-blur-sm border border-[#30363d] rounded-[24px] p-10">
           <div className="flex items-center justify-between mb-10">
             <div className="space-y-1">
-              <h3 className="text-[20px] font-bold text-[#e6edf3]">Productivity Matrix</h3>
-              <p className="text-[#8b949e] text-[12px] font-medium uppercase tracking-widest opacity-60">Completion volume per cycle</p>
+              <h3 className="text-[20px] font-bold text-[#e6edf3]">Goal Progress</h3>
+              <p className="text-[#8b949e] text-[12px] font-medium uppercase tracking-widest opacity-60">Weekly Task Completions</p>
             </div>
           </div>
           <div className="h-[350px] w-full">
@@ -235,7 +235,7 @@ export default function Dashboard() {
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 opacity-40">
                   <Zap className="w-10 h-10 text-[#8b949e]" />
-                  <p className="text-[#8b949e] text-[13px] font-medium uppercase tracking-widest">No Active Signal</p>
+                  <p className="text-[#8b949e] text-[13px] font-medium uppercase tracking-widest">No Active Habits</p>
                 </div>
               )}
             </div>
@@ -243,7 +243,7 @@ export default function Dashboard() {
             {/* Consistency Heatmap */}
             <div className="mt-10 pt-10 border-t border-[#30363d]">
               <div className="flex items-center justify-between mb-6">
-                 <h4 className="text-[10px] font-black text-[#8b949e] uppercase tracking-[0.2em] opacity-60">System Stability</h4>
+                 <h4 className="text-[10px] font-black text-[#8b949e] uppercase tracking-[0.2em] opacity-60">Consistency Grid</h4>
                  <div className="flex gap-1.5">
                     {[0, 1, 2, 3, 4].map(v => (
                        <div key={v} className="w-2.5 h-2.5 rounded-[1px]" style={{ backgroundColor: v === 0 ? '#161b22' : v === 1 ? '#0e4429' : v === 2 ? '#26a641' : v === 3 ? '#39d353' : '#39d353' }} />
@@ -262,6 +262,54 @@ export default function Dashboard() {
                     />
                   );
                 })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Activity Section */}
+      <div className="bg-[#161b22]/50 backdrop-blur-sm border border-[#30363d] rounded-[24px] p-10 mt-8 relative overflow-hidden group">
+        <div className="flex items-center justify-between mb-8">
+          <h3 className="text-[18px] font-bold text-[#e6edf3]">Recent Activity</h3>
+        </div>
+        
+        <div className="space-y-6">
+          {/* Activity Item 1 */}
+          <div className="flex gap-4">
+            <div className="mt-1.5 flex flex-col items-center">
+              <div className="w-2 h-2 rounded-full bg-[#39d353]" />
+            </div>
+            <div>
+              <p className="text-[#e6edf3] text-[14px]">Completed "Daily Morning Stretch"</p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-[#8b949e] text-[11px]">2 hours ago • Routine</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Activity Item 2 */}
+          <div className="flex gap-4">
+            <div className="mt-1.5 flex flex-col items-center">
+              <div className="w-2 h-2 rounded-full bg-[#7c79ff]" />
+            </div>
+            <div>
+              <p className="text-[#e6edf3] text-[14px]">New Goal Created: "Read 12 Books in 2024"</p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-[#8b949e] text-[11px]">5 hours ago • Goals</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Activity Item 3 */}
+          <div className="flex gap-4">
+            <div className="mt-1.5 flex flex-col items-center">
+              <div className="w-2 h-2 rounded-full bg-[#39d353]" />
+            </div>
+            <div>
+              <p className="text-[#e6edf3] text-[14px]">Streak Milestone: "7 Days Hydrated"</p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-[#8b949e] text-[11px]">Yesterday • Achievements</p>
               </div>
             </div>
           </div>

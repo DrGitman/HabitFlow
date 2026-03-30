@@ -274,7 +274,7 @@ export default function Profile() {
         <div className="bg-[#11141d] border border-[#ffffff0a] rounded-[24px] p-8">
           <div className="flex items-center gap-3 mb-8">
             <div className="p-2 rounded-[10px] bg-[#7c79ff]/10 border border-[#7c79ff]/20">
-               <Globe className="w-4 h-4 text-[#7c79ff]" />
+               <UserIcon className="w-4 h-4 text-[#7c79ff]" />
             </div>
             <h3 className="text-[#ffffff] text-[16px] font-bold tracking-tight">Identity Settings</h3>
           </div>
@@ -350,14 +350,14 @@ export default function Profile() {
             achievements.slice(0, 3).map((achievement, i) => {
               const Icon = getIcon(achievement.icon);
               return (
-                <div key={i} className="bg-[#11141d] border border-[#ffffff0a] rounded-[24px] p-7 group hover:border-[#ffffff1a] transition-all relative overflow-hidden">
+                <div key={i} className="bg-[#1e2433] rounded-[16px] p-7 transition-all relative overflow-hidden" style={{ borderBottom: `2.5px solid ${achievement.color}` }}>
                   <div className="flex justify-between items-start mb-6">
                     <div className="p-2.5 rounded-[12px] bg-[#161b22] border border-[#ffffff0a] group-hover:border-white/20 transition-all">
                       <Icon className="w-5 h-5" style={{ color: achievement.color }} />
                     </div>
                     <span className="text-[9px] font-black tracking-[0.2em] text-[#8b949e] bg-[#161b22] px-2.5 py-1 rounded-full border border-[#ffffff0a]">{achievement.type}</span>
                   </div>
-                  <h4 className="text-[#ffffff] text-[16px] font-bold mb-2">{achievement.title}</h4>
+                  <h4 className="text-[#ffffff] text-[18px] font-bold mb-2">{achievement.title}</h4>
                   <p className="text-[#8b949e] text-[12px] leading-relaxed font-medium">{achievement.desc}</p>
                 </div>
               );
@@ -367,18 +367,20 @@ export default function Profile() {
       </div>
 
       {/* Bottom Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-8">
-        <div className="bg-[#11141d]/50 backdrop-blur-sm border border-[#ffffff0a] rounded-[24px] p-10 flex flex-col items-center justify-center text-center group border-l-4 border-l-[#7c79ff]">
-           <span className="text-[52px] font-black text-[#ffffff] tracking-tighter leading-none group-hover:scale-110 transition-transform duration-500">{summary?.completion_rate || 0}%</span>
-           <p className="text-[#8b949e] text-[10px] font-black uppercase tracking-[0.2em] mt-2 opacity-60">Efficiency Rate</p>
+      <div className="bg-[#0b101a] rounded-[16px] py-14 flex flex-col md:flex-row items-center justify-between px-16 mt-8">
+        <div className="flex-1 flex flex-col items-center justify-center text-center group relative">
+           <span className="text-[64px] font-bold text-[#e6edf3] tracking-tight leading-none transition-transform duration-500">{summary?.completion_rate || 0}<span className="text-[32px] font-semibold">%</span></span>
+           <p className="text-[#8b949e] text-[11px] font-bold uppercase tracking-[0.2em] mt-3 opacity-80">Efficiency Rate</p>
+           <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[1px] h-16 bg-[#ffffff1a] hidden md:block" />
         </div>
-        <div className="bg-[#11141d]/50 backdrop-blur-sm border border-[#ffffff0a] rounded-[24px] p-10 flex flex-col items-center justify-center text-center group border-l-4 border-l-[#39d353]">
-           <span className="text-[52px] font-black text-[#ffffff] tracking-tighter leading-none group-hover:scale-110 transition-transform duration-500">{summary?.completed_tasks || 0}</span>
-           <p className="text-[#8b949e] text-[10px] font-black uppercase tracking-[0.2em] mt-2 opacity-60">Completed Nodes</p>
+        <div className="flex-1 flex flex-col items-center justify-center text-center group relative">
+           <span className="text-[64px] font-bold text-[#e6edf3] tracking-tight leading-none transition-transform duration-500">{(summary?.completed_tasks || 0).toLocaleString()}</span>
+           <p className="text-[#8b949e] text-[11px] font-bold uppercase tracking-[0.2em] mt-3 opacity-80">Completed Nodes</p>
+           <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[1px] h-16 bg-[#ffffff1a] hidden md:block" />
         </div>
-        <div className="bg-[#11141d]/50 backdrop-blur-sm border border-[#ffffff0a] rounded-[24px] p-10 flex flex-col items-center justify-center text-center group border-l-4 border-l-[#ff7b72]">
-           <span className="text-[52px] font-black text-[#ffffff] tracking-tighter leading-none group-hover:scale-110 transition-transform duration-500">{summary?.completed_tasks && summary.completed_tasks > 0 ? 1 : 0}</span>
-           <p className="text-[#8b949e] text-[10px] font-black uppercase tracking-[0.2em] mt-2 opacity-60">Architect Streak</p>
+        <div className="flex-1 flex flex-col items-center justify-center text-center group">
+           <span className="text-[64px] font-bold text-[#e6edf3] tracking-tight leading-none transition-transform duration-500">{summary?.completed_tasks && summary.completed_tasks > 0 ? 14 : 0}</span>
+           <p className="text-[#8b949e] text-[11px] font-bold uppercase tracking-[0.2em] mt-3 opacity-80">Current Streak</p>
         </div>
       </div>
 
@@ -438,22 +440,20 @@ export default function Profile() {
         onClose={() => setIsAchievementsModalOpen(false)} 
         title="Collective Signal History"
       >
-        <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+        <div className="space-y-6 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
           {achievements.map((achievement, i) => {
             const Icon = getIcon(achievement.icon);
             return (
-              <div key={i} className="flex gap-4 p-4 rounded-[16px] bg-[#161b22] border border-[#ffffff0a]">
-                <div className="p-2 h-fit rounded-[10px] bg-[#080b12] border border-[#ffffff0a]">
-                  <Icon className="w-4 h-4" style={{ color: achievement.color }} />
+                <div key={i} className="bg-[#1e2433] rounded-[16px] p-7 transition-all relative overflow-hidden" style={{ borderBottom: `2.5px solid ${achievement.color}` }}>
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="p-2.5 rounded-[12px] bg-[#161b22] border border-[#ffffff0a] transition-all">
+                      <Icon className="w-5 h-5" style={{ color: achievement.color }} />
+                    </div>
+                    <span className="text-[9px] font-black tracking-[0.2em] text-[#8b949e] bg-[#161b22] px-2.5 py-1 rounded-full border border-[#ffffff0a]">{achievement.type}</span>
+                  </div>
+                  <h4 className="text-[#ffffff] text-[18px] font-bold mb-2">{achievement.title}</h4>
+                  <p className="text-[#8b949e] text-[12px] leading-relaxed font-medium">{achievement.desc}</p>
                 </div>
-                <div>
-                   <div className="flex items-center gap-2 mb-1">
-                      <h4 className="text-white font-bold text-[14px]">{achievement.title}</h4>
-                      <span className="text-[8px] font-black tracking-widest text-[#8b949e] bg-[#080b12] px-1.5 py-0.5 rounded-full border border-[#ffffff0a]">{achievement.type}</span>
-                   </div>
-                   <p className="text-[#8b949e] text-[11px] leading-relaxed">{achievement.desc}</p>
-                </div>
-              </div>
             );
           })}
         </div>
