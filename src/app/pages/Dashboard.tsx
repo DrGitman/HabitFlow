@@ -106,7 +106,7 @@ export default function Dashboard() {
           <h2 className="text-[#ffffff] text-[24px] font-black tracking-[0.2em] leading-none uppercase mb-2">HABITFLOW</h2>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#39d353] shadow-[0_0_8px_rgba(57,211,83,0.5)]" />
-            <p className="text-[#8b949e] text-[11px] font-black uppercase tracking-[0.15em] opacity-60">Habit Architect Protocol Active</p>
+            <p className="text-[#8b949e] text-[11px] font-black uppercase tracking-[0.15em] opacity-60">Personal Excellence Protocol Active</p>
           </div>
         </div>
         <div className="text-right flex flex-col items-end">
@@ -122,9 +122,9 @@ export default function Dashboard() {
       {/* Stats Summary Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {[
-          { label: 'Network Load', value: summary?.total_tasks || 0, color: '#7c79ff', path: '/tasks', icon: Activity },
-          { label: 'Completed Ops', value: summary?.completed_tasks || 0, color: '#39d353', path: '/tasks', icon: CheckCircle2 },
-          { label: 'System Efficiency', value: `${summary?.completion_rate || 0}%`, color: '#ff7b72', path: '/analytics', icon: TrendingUp }
+          { label: 'Total Tasks', value: summary?.total_tasks || 0, color: '#7c79ff', path: '/tasks', icon: Activity },
+          { label: 'Completed', value: summary?.completed_tasks || 0, color: '#39d353', path: '/tasks', icon: CheckCircle2 },
+          { label: 'Efficiency', value: `${summary?.completion_rate || 0}%`, color: '#ff7b72', path: '/analytics', icon: TrendingUp }
         ].map((stat, i) => (
           <button 
             key={i}

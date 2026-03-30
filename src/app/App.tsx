@@ -9,10 +9,10 @@ import Habits from './pages/Habits';
 import Analytics from './pages/Analytics';
 import Calendar from './pages/Calendar';
 import Notifications from './pages/Notifications';
+import Profile from './pages/Profile';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 
-const Profile = () => <div className="p-8 text-[#e6edf3]">Profile Page Coming Soon</div>;
 const Settings = () => <div className="p-8 text-[#e6edf3]">Settings Page Coming Soon</div>;
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {

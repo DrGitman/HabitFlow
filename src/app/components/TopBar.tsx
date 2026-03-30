@@ -11,6 +11,24 @@ export default function TopBar() {
   const [searchResults, setSearchResults] = useState<any>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+
+  const hasUnread = notifications.some(n => !n.is_read);
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 60000); // Poll every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      const data = await api.getNotifications();
+      setNotifications(data as any[]);
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    }
+  };
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
@@ -124,7 +142,9 @@ export default function TopBar() {
       <div className="flex items-center gap-6">
         <Link to="/notifications" className="relative p-2.5 text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161b22] rounded-[10px] transition-all">
           <Bell className="w-4 h-4" />
-          <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-[#f85149] rounded-full ring-2 ring-[#080b12]" />
+          {hasUnread && (
+            <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-[#f85149] rounded-full ring-2 ring-[#080b12]" />
+          )}
         </Link>
 
         <div className="h-6 w-px bg-[#ffffff0a]" />
@@ -134,7 +154,7 @@ export default function TopBar() {
             <p className="text-[#ffffff] text-[13px] font-black leading-tight group-hover:text-[#7c79ff] transition-colors uppercase tracking-tight">
               {user?.full_name || 'System User'}
             </p>
-            <p className="text-[#8b949e] text-[9px] leading-tight font-black uppercase tracking-[0.15em] opacity-40 mt-0.5">Habit Architect</p>
+            <p className="text-[#8b949e] text-[9px] leading-tight font-black uppercase tracking-[0.15em] opacity-40 mt-0.5">{user?.rank || 'Habit Architect'}</p>
           </div>
           <div className="w-10 h-10 rounded-full bg-[#11141d] border border-[#ffffff0a] flex items-center justify-center text-[#7c79ff] group-hover:border-[#7c79ff] group-hover:shadow-[0_0_15px_rgba(124,121,255,0.2)] transition-all overflow-hidden relative">
             {user?.avatar_url ? (

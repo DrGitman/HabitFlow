@@ -11,13 +11,10 @@ export default function Navigation() {
     { name: 'Tasks', path: '/tasks', icon: CheckSquare },
     { name: 'Analytics', path: '/analytics', icon: BarChart3 },
     { name: 'Calendar', path: '/calendar', icon: Calendar },
-    { name: 'Notifications', path: '/notifications', icon: Bell },
-  ];
-
-  const profileItems = [
-    { name: 'Profile', path: '/profile', icon: User },
     { name: 'Settings', path: '/settings', icon: Settings },
   ];
+
+  const profileItems: any[] = [];
 
   return (
     <nav className="fixed left-0 top-0 h-screen w-64 bg-[#080b12] border-r border-[#ffffff0a] flex flex-col z-50">
@@ -57,7 +54,7 @@ export default function Navigation() {
           );
         })}
 
-        <div className="my-6 mx-4 border-t border-[#ffffff0a] opacity-30" />
+        <div className="my-6 mx-4 border-t border-[#ffffff0a] opacity-30 hidden" />
 
         {profileItems.map((item) => {
           const Icon = item.icon;
@@ -94,7 +91,7 @@ export default function Navigation() {
           className="flex items-center gap-3 w-full px-5 py-3 rounded-[12px] text-[#f85149] hover:bg-[#f85149]/5 hover:border hover:border-[#f851491a] transition-all group"
         >
           <LogOut className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          <span className="font-['Inter'] font-bold text-[13px] tracking-tight">Disconnect</span>
+          <span className="font-['Inter'] font-bold text-[13px] tracking-tight">Logout</span>
         </button>
       </div>
     </nav>

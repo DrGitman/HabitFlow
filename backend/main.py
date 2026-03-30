@@ -92,12 +92,12 @@ def verify_token(token: str):
 async def get_current_user_id(request: Request):
     auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
     
     token = auth_header.split(' ')[1]
     user_id = verify_token(token)
     if not user_id:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
     return user_id
 
 # --- Endpoints ---
@@ -125,7 +125,7 @@ async def signup(data: UserSignup):
 async def login(data: UserLogin):
     user = User.find_by_email(data.email)
     if not user or not bcrypt.checkpw(data.password.encode('utf-8'), user['password_hash'].encode('utf-8')):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
     token = create_token(user['id'])
     return {
@@ -198,6 +198,12 @@ async def complete_task(task_id: int, data: dict, user_id: int = Depends(get_cur
     task = Task.mark_complete(task_id, user_id, is_completed)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+        
+    # Recalculate rank after completion
+    summary = await get_analytics_summary(user_id)
+    new_rank = calculate_user_rank(summary['completed_tasks'])
+    User.update(user_id, rank=new_rank)
+    
     return task
 
 @app.delete("/api/tasks/{task_id}")
@@ -381,10 +387,133 @@ async def global_search(q: str = Query("", min_length=0), user_id: int = Depends
         'goals': goals
     }
 
+def calculate_user_rank(completed_tasks: int) -> str:
+    """Calculate architect rank based on completed task nodes"""
+    if completed_tasks >= 500: return "Nexus Prime Architect"
+    if completed_tasks >= 250: return "Master System Designer"
+    if completed_tasks >= 100: return "Senior Architect"
+    if completed_tasks >= 50: return "Disciplined Architect"
+    if completed_tasks >= 10: return "Initiate Architect"
+    return "Novice Architect"
+
 @app.get("/api/profile")
 async def get_profile(user_id: int = Depends(get_current_user_id)):
     user = User.find_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Update rank dynamically on fetch
+    summary = await get_analytics_summary(user_id)
+    new_rank = calculate_user_rank(summary['completed_tasks'])
+    
+    if user.get('rank') != new_rank:
+        User.update(user_id, rank=new_rank)
+        user['rank'] = new_rank
+        
     return user
+
+@app.put("/api/profile")
+async def update_profile(data: dict, user_id: int = Depends(get_current_user_id)):
+    try:
+        # Prevent some fields from being updated directly through this endpoint
+        update_data = {k: v for k, v in data.items() if k in ['full_name', 'email', 'timezone', 'status', 'avatar_url']}
+        
+        user = User.update(user_id, **update_data)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        # Also sync rank in case progress stats changed (unlikely here but good for consistency)
+        summary = await get_analytics_summary(user_id)
+        new_rank = calculate_user_rank(summary['completed_tasks'])
+        if user.get('rank') != new_rank:
+            user = User.update(user_id, rank=new_rank)
+
+        return user
+    except Exception as e:
+        print(f"Update error: {e}")
+        # If it's a unique constraint error for email
+        if "unique constraint" in str(e).lower() and "email" in str(e).lower():
+            raise HTTPException(status_code=400, detail="This email is already in use by another architect.")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.put("/api/profile/password")
+async def change_password(data: dict, user_id: int = Depends(get_current_user_id)):
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+    
+    user = User.find_by_id_with_password(user_id)
+    if not user or not bcrypt.checkpw(current_password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+        raise HTTPException(status_code=400, detail="Invalid current password")
+    
+    password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    User.update(user_id, password_hash=password_hash)
+    return {"message": "Password updated successfully"}
+
+@app.post("/api/profile/avatar")
+async def update_avatar(data: dict, user_id: int = Depends(get_current_user_id)):
+    avatar_url = data.get('avatar_url')
+    if not avatar_url:
+        raise HTTPException(status_code=400, detail="Avatar URL is required")
+    
+    User.update(user_id, avatar_url=avatar_url)
+    return {"avatar_url": avatar_url}
+
+@app.get("/api/profile/achievements")
+async def get_achievements(user_id: int = Depends(get_current_user_id)):
+    # Calculate dynamic achievements
+    summary = await get_analytics_summary(user_id)
+    streaks = await get_analytics_streaks(user_id)
+    
+    max_streak = 0
+    if streaks:
+        max_streak = max([s['current_streak'] for s in streaks])
+    
+    achievements = []
+    
+    if max_streak >= 30:
+        achievements.append({
+            "title": "30 Day Streak",
+            "desc": "Consistent discipline maintained for 30 consecutive calendar days.",
+            "type": "RARE",
+            "icon": "Flame",
+            "color": "#ff7b72"
+        })
+    elif max_streak >= 7:
+         achievements.append({
+            "title": "7 Day Streak",
+            "desc": "Maintain focus for a full week without breaking the chain.",
+            "type": "COMMON",
+            "icon": "Flame",
+            "color": "#ff7b72"
+        })
+
+    if summary['completed_tasks'] >= 100:
+        achievements.append({
+            "title": "Completed 100 Tasks",
+            "desc": "A significant milestone in productivity and execution.",
+            "type": "EPIC",
+            "icon": "Zap",
+            "color": "#7c79ff"
+        })
+    elif summary['completed_tasks'] >= 10:
+        achievements.append({
+            "title": "Productivity Pulse",
+            "desc": "You've successfully completed 10 tasks. Keep the momentum!",
+            "type": "COMMON",
+            "icon": "CheckCircle2",
+            "color": "#39d353"
+        })
+
+    if summary['completion_rate'] >= 90 and summary['total_habits'] >= 3:
+        achievements.append({
+            "title": "Early Bird Elite",
+            "desc": "High efficiency maintained across multiple habits.",
+            "type": "COMMON",
+            "icon": "Award",
+            "color": "#d29922"
+        })
+
+    return achievements
 
 if __name__ == "__main__":
     import uvicorn

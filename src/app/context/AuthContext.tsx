@@ -6,10 +6,12 @@ interface User {
   email: string;
   full_name?: string;
   avatar_url?: string;
+  rank?: string;
 }
 
 interface AuthContextType {
   user: User | null;
+  setUser: (user: User | null) => void;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, fullName?: string) => Promise<void>;
@@ -65,6 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        setUser,
         token,
         login,
         signup,

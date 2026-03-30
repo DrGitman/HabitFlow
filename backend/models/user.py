@@ -22,7 +22,13 @@ class User:
     @staticmethod
     def find_by_id(user_id):
         """Find user by ID"""
-        query = "SELECT id, email, full_name, avatar_url, created_at FROM users WHERE id = %s"
+        query = "SELECT id, email, full_name, avatar_url, rank, timezone, status, created_at FROM users WHERE id = %s"
+        return execute_query(query, (user_id,), fetch_one=True)
+
+    @staticmethod
+    def find_by_id_with_password(user_id):
+        """Find user by ID including password hash"""
+        query = "SELECT * FROM users WHERE id = %s"
         return execute_query(query, (user_id,), fetch_one=True)
 
     @staticmethod

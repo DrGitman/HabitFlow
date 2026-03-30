@@ -34,20 +34,44 @@ class ApiService {
   ): Promise<T> {
     const { requiresAuth = true, ...fetchOptions } = options;
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...fetchOptions,
-      headers: {
-        ...this.getHeaders(requiresAuth),
-        ...fetchOptions.headers,
-      },
-    });
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...fetchOptions,
+        headers: {
+          ...this.getHeaders(requiresAuth),
+          ...fetchOptions.headers,
+        },
+      });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'An error occurred' }));
-      throw new Error(error.error || `HTTP ${response.status}`);
+      if (!response.ok) {
+        // FastAPI returns error messages in the 'detail' field
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail || errorData.error;
+
+        if (errorMessage) {
+          throw new Error(errorMessage);
+        }
+
+        // Fallback messages for common status codes
+        switch (response.status) {
+          case 401:
+            throw new Error('Session expired. Please sign in again.');
+          case 403:
+            throw new Error('You do not have permission to perform this action.');
+          case 404:
+            throw new Error('The requested resource was not found.');
+          case 500:
+            throw new Error('An internal server error occurred. Please try again later.');
+          default:
+            throw new Error(`Error: ${response.status} ${response.statusText}`);
+        }
+      }
+
+      return response.json();
+    } catch (error: any) {
+      if (error instanceof Error) throw error;
+      throw new Error('A network error occurred. Please check your connection.');
     }
-
-    return response.json();
   }
 
   // Auth
@@ -207,6 +231,31 @@ class ApiService {
 
   async getProfile() {
     return this.request('/api/profile');
+  }
+
+  async updateProfile(data: any) {
+    return this.request('/api/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async changePassword(data: any) {
+    return this.request('/api/profile/password', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateAvatar(avatarUrl: string) {
+    return this.request('/api/profile/avatar', {
+      method: 'POST',
+      body: JSON.stringify({ avatar_url: avatarUrl }),
+    });
+  }
+
+  async getAchievements() {
+    return this.request('/api/profile/achievements');
   }
 }
 
