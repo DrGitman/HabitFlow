@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router';
 import { CheckSquare, Trophy, RefreshCw } from 'lucide-react';
 import Tasks from './Tasks';
 import Goals from './Goals';
@@ -13,7 +14,29 @@ const tabs: { id: Tab; label: string; Icon: React.ElementType }[] = [
 ];
 
 export default function Actions() {
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>('tasks');
+  const [forceNew, setForceNew] = useState(false);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const action = searchParams.get('action');
+    
+    if (tab === 'tasks' || tab === 'goals' || tab === 'habits') {
+      setActiveTab(tab);
+    }
+    
+    if (action === 'new') {
+      setForceNew(true);
+      // Clear the URL param after reading
+      window.history.replaceState(null, '', '/actions');
+    }
+  }, [searchParams]);
+
+  // Callback to reset forceNew after child component uses it
+  const handleFormOpened = () => {
+    setForceNew(false);
+  };
 
   return (
     <div className="p-10 max-w-[1200px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 font-['Inter']">
@@ -43,9 +66,9 @@ export default function Actions() {
             aligns flush inside the grid column, identical to how Settings works. */}
         <div className="col-span-3 w-full overflow-hidden">
           <div className="-mx-8 -mt-8">
-            {activeTab === 'tasks'  && <Tasks />}
-            {activeTab === 'goals'  && <Goals />}
-            {activeTab === 'habits' && <Habits />}
+            {activeTab === 'tasks'  && <Tasks forceNew={forceNew} onFormOpened={handleFormOpened} />}
+            {activeTab === 'goals'  && <Goals forceNew={forceNew} onFormOpened={handleFormOpened} />}
+            {activeTab === 'habits' && <Habits forceNew={forceNew} onFormOpened={handleFormOpened} />}
           </div>
         </div>
 

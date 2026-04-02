@@ -1,10 +1,13 @@
-import { Link, useLocation } from 'react-router';
-import { Home, Zap, BarChart3, LogOut, Calendar, Settings, Plus } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router';
+import { Home, Zap, BarChart3, LogOut, Calendar, Settings, Plus, Target, CheckSquare, Activity } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useState } from 'react';
 
 export default function Navigation() {
   const location = useLocation();
   const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [showQuickOptions, setShowQuickOptions] = useState(false);
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: Home },
@@ -15,6 +18,33 @@ export default function Navigation() {
   ];
 
   const profileItems: any[] = [];
+
+  const quickOptions = [
+    { 
+      icon: CheckSquare, 
+      color: '#58a6ff', 
+      bgColor: 'bg-[#58a6ff]/10',
+      borderColor: 'border-[#58a6ff]/20',
+      label: 'Task',
+      action: () => navigate('/actions?new=task')
+    },
+    { 
+      icon: Target, 
+      color: '#f85149', 
+      bgColor: 'bg-[#f85149]/10',
+      borderColor: 'border-[#f85149]/20',
+      label: 'Goal',
+      action: () => navigate('/actions?new=goal')
+    },
+    { 
+      icon: Activity, 
+      color: '#39d353', 
+      bgColor: 'bg-[#39d353]/10',
+      borderColor: 'border-[#39d353]/20',
+      label: 'Habit',
+      action: () => navigate('/actions?new=habit')
+    },
+  ];
 
   return (
     <nav className="fixed left-0 top-0 h-screen w-64 bg-[#080b12] border-r border-[#ffffff0a] flex flex-col z-50">
@@ -81,8 +111,35 @@ export default function Navigation() {
       </div>
 
       {/* Bottom Actions */}
-      <div className="p-6 space-y-4">
+      <div className="p-6 space-y-4 relative">
+        {/* Quick Options Popup */}
+        {showQuickOptions && (
+          <div className="absolute bottom-full left-0 right-0 mb-3 bg-[#161b22] border border-[#30363d] rounded-[16px] p-4 shadow-xl">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#8b949e] mb-3 text-center">Quick Add</p>
+            <div className="flex justify-center gap-4">
+              {quickOptions.map((option, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    option.action();
+                    setShowQuickOptions(false);
+                  }}
+                  className={`w-12 h-12 rounded-full ${option.bgColor} border ${option.borderColor} flex items-center justify-center transition-all hover:scale-110 hover:shadow-lg`}
+                >
+                  <option.icon className="w-5 h-5" style={{ color: option.color }} />
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-center gap-4 mt-2">
+              {quickOptions.map((option, i) => (
+                <span key={i} className="text-[10px] text-[#8b949e] w-12 text-center">{option.label}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        
         <button
+          onClick={() => setShowQuickOptions(!showQuickOptions)}
           className="w-full bg-gradient-to-r from-[#8e8cf7] to-[#6d69f0] hover:from-[#7c79ff] hover:to-[#524eff] text-white font-['Inter'] font-black uppercase tracking-widest text-[11px] py-4 rounded-[12px] flex items-center justify-center gap-2 transition-all active:scale-95 shadow-[0_12px_24px_rgba(124,121,255,0.15)]"
         >
           <Plus className="w-4 h-4" />

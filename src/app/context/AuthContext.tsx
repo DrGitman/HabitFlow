@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
 
+const TOKEN_KEY = 'auth_token';
+const USER_KEY = 'auth_user';
+
 interface User {
   id: number;
   email: string;
@@ -28,7 +31,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // No persistence: always start unauthenticated so login is required on every new session
+    // Silent login - restore session from localStorage
+    const storedToken = localStorage.getItem(TOKEN_KEY);
+    const storedUser = localStorage.getItem(USER_KEY);
+    
+    if (storedToken && storedUser) {
+      // Token exists, restore user
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setToken(storedToken);
+        setUser(parsedUser);
+      } catch (e) {
+        // Invalid stored data, clear it
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+      }
+    }
     setIsLoading(false);
   }, []);
 
@@ -36,19 +54,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response: any = await api.login(email, password);
     setToken(response.token);
     setUser(response.user);
-    // Token kept in memory only — no localStorage
+    // Persist to localStorage
+    localStorage.setItem(TOKEN_KEY, response.token);
+    localStorage.setItem(USER_KEY, JSON.stringify(response.user));
   };
 
   const signup = async (email: string, password: string, fullName?: string) => {
     const response: any = await api.signup(email, password, fullName);
     setToken(response.token);
     setUser(response.user);
-    // Token kept in memory only — no localStorage
+    // Persist to localStorage
+    localStorage.setItem(TOKEN_KEY, response.token);
+    localStorage.setItem(USER_KEY, JSON.stringify(response.user));
   };
 
   const logout = () => {
     setToken(null);
     setUser(null);
+    // Clear localStorage
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
   };
 
   return (

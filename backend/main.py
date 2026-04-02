@@ -61,6 +61,7 @@ class TaskCreate(BaseModel):
     category: Optional[str] = None
     priority: str = "medium"
     due_date: Optional[str] = None
+    goal_id: Optional[int] = None
 
 class GoalCreate(BaseModel):
     title: str
@@ -246,7 +247,6 @@ async def delete_goal(goal_id: int, user_id: int = Depends(get_current_user_id))
 @app.get("/api/analytics/summary")
 async def get_analytics_summary(user_id: int = Depends(get_current_user_id)):
     total_habits = len(Habit.get_all(user_id))
-    # total_tasks = ALL tasks ever created (completed is a subset of total)
     total_tasks = len(Task.get_all(user_id))
     completed_tasks = len(Task.get_all(user_id, is_completed=True))
     total_goals = len(Goal.get_all(user_id, is_completed=False))
@@ -255,20 +255,33 @@ async def get_analytics_summary(user_id: int = Depends(get_current_user_id)):
     today = datetime.now().date()
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
+    last_week_start = week_start - timedelta(days=7)
+    last_week_end = week_start - timedelta(days=1)
 
     query = """
-        SELECT COUNT(*) as count FROM habit_completions
+        SELECT COUNT(DISTINCT CONCAT(habit_id, completion_date)) as count 
+        FROM habit_completions
         WHERE user_id = %s AND completion_date BETWEEN %s AND %s
     """
     week_completions = execute_query(query, (user_id, week_start, week_end), fetch_one=True)
+    last_week_completions = execute_query(query, (user_id, last_week_start, last_week_end), fetch_one=True)
 
     habits = Habit.get_all(user_id)
-    days_passed = (today - week_start).days + 1
-    total_possible = len(habits) * days_passed
+    total_habits_count = len(habits)
+    days_passed = max((today - week_start).days + 1, 1)
+    total_possible = total_habits_count * days_passed
+
+    week_count = week_completions['count'] if week_completions and week_completions.get('count') else 0
+    last_week_count = last_week_completions['count'] if last_week_completions and last_week_completions.get('count') else 0
 
     completion_rate = 0
     if total_possible > 0:
-        completion_rate = round((week_completions['count'] / total_possible) * 100, 1)
+        completion_rate = round((week_count / total_possible) * 100, 1)
+
+    if last_week_count > 0:
+        momentum = round(((week_count - last_week_count) / last_week_count) * 100, 1)
+    else:
+        momentum = 100 if week_count > 0 else 0
 
     return {
         'total_habits': total_habits,
@@ -277,7 +290,70 @@ async def get_analytics_summary(user_id: int = Depends(get_current_user_id)):
         'total_goals': total_goals,
         'completed_goals': completed_goals,
         'completion_rate': completion_rate,
-        'week_completions': week_completions['count']
+        'week_completions': week_count,
+        'this_week_completions': week_count,
+        'last_week_completions': last_week_count,
+        'momentum': momentum
+    }
+
+# --- Comprehensive Metrics (All-in-One) ---
+
+@app.get("/api/analytics/metrics")
+async def get_analytics_metrics(user_id: int = Depends(get_current_user_id)):
+    """
+    Comprehensive metrics endpoint with all calculated values:
+    - Task Metrics: total_tasks, completed_tasks, remaining_tasks, task_efficiency
+    - Habit Metrics: total_habits, today_completion, habits_data (current_streak, longest_streak, consistency)
+    - Goal Metrics: total_goals, completed_goals, average_goal_progress, goals_data
+    - System Metric: productivity_score
+    """
+    # Task Metrics
+    task_metrics = Task.calculate_metrics(user_id)
+    
+    # Habit Metrics
+    habit_metrics = Habit.calculate_all_metrics(user_id)
+    
+    # Goal Metrics
+    goal_metrics = Goal.calculate_all_metrics(user_id)
+    
+    # Calculate Habit Consistency (average across all habits)
+    habits_data = habit_metrics.get('habits_data', [])
+    avg_habit_consistency = 0
+    if habits_data:
+        total_consistency = sum(h.get('consistency', 0) for h in habits_data)
+        avg_habit_consistency = round(total_consistency / len(habits_data), 1)
+    
+    # Calculate Average Goal Progress
+    avg_goal_progress = goal_metrics.get('average_goal_progress', 0)
+    
+    # Productivity Score = (0.5 * task_efficiency) + (0.3 * habit_consistency) + (0.2 * average_goal_progress)
+    productivity_score = round(
+        (0.5 * task_metrics['task_efficiency']) +
+        (0.3 * avg_habit_consistency) +
+        (0.2 * avg_goal_progress), 1
+    )
+    
+    return {
+        # Task Metrics
+        'total_tasks': task_metrics['total_tasks'],
+        'completed_tasks': task_metrics['completed_tasks'],
+        'remaining_tasks': task_metrics['remaining_tasks'],
+        'task_efficiency': task_metrics['task_efficiency'],
+        
+        # Habit Metrics
+        'total_habits': habit_metrics['total_habits'],
+        'today_completion': habit_metrics['today_completion'],
+        'habits_data': habits_data,
+        'habit_consistency': avg_habit_consistency,
+        
+        # Goal Metrics
+        'total_goals': goal_metrics['total_goals'],
+        'completed_goals': goal_metrics['completed_goals'],
+        'average_goal_progress': avg_goal_progress,
+        'goals_data': goal_metrics.get('goals_data', []),
+        
+        # System Metric
+        'productivity_score': productivity_score
     }
 
 @app.get("/api/analytics/progress")
@@ -343,6 +419,106 @@ async def get_calendar_data(start_date: Optional[str] = None, end_date: Optional
         'completions': completions
     }
 
+@app.get("/api/tasks/upcoming")
+async def get_upcoming_tasks(user_id: int = Depends(get_current_user_id)):
+    """Get upcoming tasks (future due dates)"""
+    today = datetime.now().date()
+    query = """
+        SELECT * FROM tasks 
+        WHERE user_id = %s AND due_date IS NOT NULL AND due_date >= %s AND is_completed = false
+        ORDER BY due_date ASC
+        LIMIT 10
+    """
+    return execute_query(query, (user_id, today)) or []
+
+@app.get("/api/analytics/calendar-stats")
+async def get_calendar_stats(user_id: int = Depends(get_current_user_id)):
+    """Get calendar page statistics from database"""
+    today = datetime.now().date()
+    
+    # Focus Score = completion rate this month
+    month_start = today.replace(day=1)
+    query = """
+        SELECT COUNT(DISTINCT CONCAT(habit_id, completion_date)) as count 
+        FROM habit_completions
+        WHERE user_id = %s AND completion_date BETWEEN %s AND %s
+    """
+    month_completions = execute_query(query, (user_id, month_start, today), fetch_one=True)
+    
+    habits = Habit.get_all(user_id)
+    total_habits = len(habits)
+    days_in_month = today.day
+    total_possible = total_habits * days_in_month
+    
+    focus_score = 0
+    if total_possible > 0:
+        focus_score = round((month_completions['count'] if month_completions and month_completions.get('count') else 0) / total_possible * 100, 1)
+    
+    # Top Habit - habit with most completions this month
+    top_habit_query = """
+        SELECT h.name, COUNT(*) as completions, %s as total_days
+        FROM habit_completions hc
+        JOIN habits h ON hc.habit_id = h.id
+        WHERE hc.user_id = %s AND hc.completion_date BETWEEN %s AND %s
+        GROUP BY h.id, h.name
+        ORDER BY completions DESC
+        LIMIT 1
+    """
+    top_habit = execute_query(top_habit_query, (days_in_month, user_id, month_start, today), fetch_one=True)
+    
+    # Current Streak - max consecutive days across all habits
+    streak_query = """
+        SELECT completion_date FROM habit_completions
+        WHERE user_id = %s
+        ORDER BY completion_date DESC
+    """
+    completions = execute_query(streak_query, (user_id,)) or []
+    
+    current_streak = 0
+    if completions:
+        streak_count = 0
+        last_date = None
+        for comp in completions:
+            comp_date = comp['completion_date']
+            if hasattr(comp_date, 'date'):
+                comp_date = comp_date.date()
+            
+            if last_date is None:
+                # Check if most recent is today or yesterday
+                if comp_date == today or comp_date == today - timedelta(days=1):
+                    streak_count = 1
+                    last_date = comp_date
+                else:
+                    break
+            else:
+                if (last_date - comp_date).days == 1:
+                    streak_count += 1
+                    last_date = comp_date
+                else:
+                    break
+        current_streak = streak_count
+    
+    # Calculate vs last month
+    last_month_end = month_start - timedelta(days=1)
+    last_month_start = last_month_end.replace(day=1)
+    last_month_completions = execute_query(query, (user_id, last_month_start, last_month_end), fetch_one=True)
+    last_month_count = last_month_completions['count'] if last_month_completions and last_month_completions.get('count') else 0
+    last_month_days = last_month_end.day
+    last_month_possible = total_habits * last_month_days
+    last_month_score = round((last_month_count / last_month_possible) * 100, 1) if last_month_possible > 0 else 0
+    focus_change = focus_score - last_month_score
+    
+    return {
+        'focus_score': focus_score,
+        'focus_change': focus_change,
+        'top_habit': {
+            'name': top_habit['name'] if top_habit else None,
+            'completions': top_habit['completions'] if top_habit else 0,
+            'total_days': top_habit['total_days'] if top_habit else days_in_month
+        } if top_habit else None,
+        'current_streak': current_streak
+    }
+
 @app.get("/api/notifications")
 async def get_notifications(user_id: int = Depends(get_current_user_id)):
     query = """
@@ -369,46 +545,128 @@ async def delete_notification(notification_id: int, user_id: int = Depends(get_c
 
 @app.get("/api/recent-activity")
 async def get_recent_activity(user_id: int = Depends(get_current_user_id)):
-    """Return most recent 10 activity events: task completions + habit completions"""
-    task_query = """
-        SELECT 'task' as type, title as label, 'Tasks' as category,
-               COALESCE(completed_at, updated_at, created_at) as occurred_at
+    """Return all recent activity: tasks (created/completed), habits completed, goals (created/completed)"""
+    
+    # Tasks - created
+    tasks_created_query = """
+        SELECT 'task_created' as type, title as label, 'Tasks' as category,
+               created_at as occurred_at
         FROM tasks
-        WHERE user_id = %s AND is_completed = true
-        ORDER BY COALESCE(completed_at, updated_at, created_at) DESC
-        LIMIT 5
+        WHERE user_id = %s
+        ORDER BY created_at DESC
+        LIMIT 10
     """
-    habit_query = """
-        SELECT 'habit' as type, h.name as label, 'Habits' as category,
-               hc.completed_at as occurred_at
+    
+    # Tasks - completed
+    tasks_completed_query = """
+        SELECT 'task_completed' as type, title as label, 'Tasks' as category,
+               completed_at as occurred_at
+        FROM tasks
+        WHERE user_id = %s AND is_completed = true AND completed_at IS NOT NULL
+        ORDER BY completed_at DESC
+        LIMIT 10
+    """
+    
+    # Habits completed
+    habits_completed_query = """
+        SELECT 'habit_completed' as type, h.name as label, 'Habits' as category,
+               hc.completion_date as occurred_at
         FROM habit_completions hc
         JOIN habits h ON hc.habit_id = h.id
         WHERE hc.user_id = %s
-        ORDER BY hc.completed_at DESC
-        LIMIT 5
+        ORDER BY hc.completion_date DESC
+        LIMIT 10
     """
-    tasks = execute_query(task_query, (user_id,)) or []
-    habits = execute_query(habit_query, (user_id,)) or []
+    
+    # Goals - created
+    goals_created_query = """
+        SELECT 'goal_created' as type, title as label, 'Goals' as category,
+               created_at as occurred_at
+        FROM goals
+        WHERE user_id = %s
+        ORDER BY created_at DESC
+        LIMIT 10
+    """
+    
+    # Goals - completed
+    goals_completed_query = """
+        SELECT 'goal_completed' as type, title as label, 'Goals' as category,
+               completed_at as occurred_at
+        FROM goals
+        WHERE user_id = %s AND is_completed = true AND completed_at IS NOT NULL
+        ORDER BY completed_at DESC
+        LIMIT 10
+    """
+    
+    tasks_created = execute_query(tasks_created_query, (user_id,)) or []
+    tasks_completed = execute_query(tasks_completed_query, (user_id,)) or []
+    habits_completed = execute_query(habits_completed_query, (user_id,)) or []
+    goals_created = execute_query(goals_created_query, (user_id,)) or []
+    goals_completed = execute_query(goals_completed_query, (user_id,)) or []
 
-    # Merge and sort by time, take top 10
     events = []
-    for item in tasks:
+    
+    for item in tasks_created:
+        occurred_at = item.get('occurred_at')
+        if occurred_at and hasattr(occurred_at, 'isoformat'):
+            occurred_at = occurred_at.isoformat()
         events.append({
             'type': item['type'],
             'label': item['label'],
             'category': item['category'],
-            'occurred_at': item['occurred_at'].isoformat() if item['occurred_at'] else None
+            'occurred_at': occurred_at
         })
-    for item in habits:
+    
+    for item in tasks_completed:
+        occurred_at = item.get('occurred_at')
+        if occurred_at and hasattr(occurred_at, 'isoformat'):
+            occurred_at = occurred_at.isoformat()
         events.append({
             'type': item['type'],
             'label': item['label'],
             'category': item['category'],
-            'occurred_at': item['occurred_at'].isoformat() if item['occurred_at'] else None
+            'occurred_at': occurred_at
+        })
+    
+    for item in habits_completed:
+        occurred_at = item.get('occurred_at')
+        if occurred_at:
+            if hasattr(occurred_at, 'isoformat'):
+                occurred_at = occurred_at.isoformat()
+            elif isinstance(occurred_at, str):
+                occurred_at = occurred_at + "T00:00:00"
+        events.append({
+            'type': item['type'],
+            'label': item['label'],
+            'category': item['category'],
+            'occurred_at': occurred_at
+        })
+        
+    for item in goals_created:
+        occurred_at = item.get('occurred_at')
+        if occurred_at and hasattr(occurred_at, 'isoformat'):
+            occurred_at = occurred_at.isoformat()
+        events.append({
+            'type': item['type'],
+            'label': item['label'],
+            'category': item['category'],
+            'occurred_at': occurred_at
+        })
+    
+    for item in goals_completed:
+        occurred_at = item.get('occurred_at')
+        if occurred_at and hasattr(occurred_at, 'isoformat'):
+            occurred_at = occurred_at.isoformat()
+        events.append({
+            'type': item['type'],
+            'label': item['label'],
+            'category': item['category'],
+            'occurred_at': occurred_at
         })
 
-    events.sort(key=lambda x: x['occurred_at'] or '', reverse=True)
-    return events[:10]
+    # Sort by occurred_at descending (most recent first)
+    events.sort(key=lambda x: str(x.get('occurred_at') or ''), reverse=True)
+    return events[:20]
 
 
 

@@ -201,12 +201,24 @@ class ApiService {
     return this.request('/api/analytics/streaks');
   }
 
+  async getAnalyticsMetrics() {
+    return this.request('/api/analytics/metrics');
+  }
+
   async getCalendarData(startDate?: string, endDate?: string) {
     const params = new URLSearchParams();
     if (startDate) params.append('start_date', startDate);
     if (endDate) params.append('end_date', endDate);
     const queryString = params.toString();
     return this.request(`/api/calendar-data${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async getUpcomingTasks() {
+    return this.request('/api/tasks/upcoming');
+  }
+
+  async getCalendarStats() {
+    return this.request('/api/analytics/calendar-stats');
   }
 
   async getNotifications() {

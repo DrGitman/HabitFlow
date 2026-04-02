@@ -286,35 +286,68 @@ export default function Dashboard() {
 
         <div className="space-y-6">
           {recentActivity.length > 0 ? (
-            recentActivity.slice(0, 6).map((event, i) => {
-              const dotColor = event.type === 'task' ? '#7c79ff' : '#39d353';
-              const timeAgo = event.occurred_at
-                ? (() => {
-                    const diff = Date.now() - new Date(event.occurred_at).getTime();
-                    const mins = Math.floor(diff / 60000);
-                    const hrs = Math.floor(mins / 60);
-                    const days = Math.floor(hrs / 24);
-                    if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
-                    if (hrs > 0) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
-                    return `${mins} minute${mins !== 1 ? 's' : ''} ago`;
-                  })()
-                : 'Recently';
-              return (
-                <div key={i} className="flex gap-4">
-                  <div className="mt-1.5 flex flex-col items-center">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: dotColor }} />
-                  </div>
-                  <div>
-                    <p className="text-[#e6edf3] text-[14px]">
-                      {event.type === 'task' ? 'Completed task' : 'Completed habit'}: &ldquo;{event.label}&rdquo;
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <p className="text-[#8b949e] text-[11px]">{timeAgo} &bull; {event.category}</p>
+            <>
+              {recentActivity.slice(0, 3).map((event, i) => {
+                const getActivityInfo = (type: string) => {
+                  switch(type) {
+                    case 'task_created': return { color: '#58a6ff', text: 'Created task' };
+                    case 'task_completed': return { color: '#39d353', text: 'Completed task' };
+                    case 'habit_completed': return { color: '#39d353', text: 'Completed habit' };
+                    case 'goal_created': return { color: '#f85149', text: 'Created goal' };
+                    case 'goal_completed': return { color: '#f85149', text: 'Completed goal' };
+                    default: return { color: '#8b949e', text: 'Activity' };
+                  }
+                };
+                const activity = getActivityInfo(event.type);
+                const timeAgo = event.occurred_at
+                  ? (() => {
+                      try {
+                        const eventDate = new Date(event.occurred_at);
+                        if (isNaN(eventDate.getTime())) return 'Recently';
+                        
+                        const now = new Date();
+                        const diff = now.getTime() - eventDate.getTime();
+                        
+                        if (diff < 0) return 'Just now';
+                        
+                        const mins = Math.floor(diff / 60000);
+                        const hrs = Math.floor(mins / 60);
+                        const days = Math.floor(hrs / 24);
+                        
+                        if (days > 0) return `${days}d ago`;
+                        if (hrs > 0) return `${hrs}h ago`;
+                        if (mins > 0) return `${mins}m ago`;
+                        return 'Just now';
+                      } catch {
+                        return 'Recently';
+                      }
+                    })()
+                  : 'Recently';
+                return (
+                  <div key={i} className="flex gap-4">
+                    <div className="mt-1.5 flex flex-col items-center">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: activity.color }} />
+                    </div>
+                    <div>
+                      <p className="text-[#e6edf3] text-[14px]">
+                        {activity.text}: &ldquo;{event.label}&rdquo;
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-[#8b949e] text-[11px]">{timeAgo} &bull; {event.category}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })
+                );
+              })}
+              {recentActivity.length > 3 && (
+                <button
+                  onClick={() => navigate('/analytics')}
+                  className="text-[#7c79ff] text-[13px] font-medium hover:underline mt-2"
+                >
+                  See more
+                </button>
+              )}
+            </>
           ) : (
             <div className="flex flex-col items-center justify-center py-8 opacity-40">
               <Zap className="w-8 h-8 text-[#8b949e] mb-3" />

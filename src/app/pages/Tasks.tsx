@@ -91,11 +91,53 @@ function MiniHeatmap() {
   );
 }
 
-// Upcoming panel
-const UPCOMING = [
-  { when: 'Tomorrow, 10:00 AM', label: 'Client Review Meeting' },
-  { when: 'Wed, Jun 14',        label: 'Renew Software Licenses' },
-];
+// Upcoming panel - now fetched from DB
+function UpcomingTasks({ tasks }: { tasks: Task[] }) {
+  const upcomingTasks = tasks
+    .filter(t => t.due_date && !t.is_completed)
+    .sort((a, b) => {
+      if (!a.due_date || !b.due_date) return 0;
+      return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+    })
+    .slice(0, 5);
+
+  const formatDueDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const dateOnly = new Date(date);
+    dateOnly.setHours(0, 0, 0, 0);
+    
+    if (dateOnly.getTime() === today.getTime()) return 'Today';
+    if (dateOnly.getTime() === tomorrow.getTime()) return 'Tomorrow';
+    
+    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  return (
+    <div className="bg-[#171f33] border border-[#ffffff08] rounded-[14px] p-5">
+      <p className="text-[10px] font-black uppercase tracking-widest text-[#8b949e] mb-4">Upcoming</p>
+      <div className="flex flex-col gap-3">
+        {upcomingTasks.length > 0 ? (
+          upcomingTasks.map(task => (
+            <div key={task.id} className="flex gap-3">
+              <div className="w-[3px] rounded-full bg-[#7c79ff] shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[11px] text-[#8b949e]">{task.due_date ? formatDueDate(task.due_date) : 'No date'}</p>
+                <p className="text-[13px] font-semibold text-[#c7c4d7]">{task.title}</p>
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="text-[11px] text-[#8b949e]">No upcoming tasks</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 type Filter = 'all' | 'work' | 'personal';
 
@@ -333,20 +375,7 @@ export default function Tasks() {
           <FocusMode />
 
           {/* Upcoming */}
-          <div className="bg-[#171f33] border border-[#ffffff08] rounded-[14px] p-5">
-            <p className="text-[10px] font-black uppercase tracking-widest text-[#8b949e] mb-4">Upcoming</p>
-            <div className="flex flex-col gap-3">
-              {UPCOMING.map(u => (
-                <div key={u.label} className="flex gap-3">
-                  <div className="w-[3px] rounded-full bg-[#7c79ff] shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-[11px] text-[#8b949e]">{u.when}</p>
-                    <p className="text-[13px] font-semibold text-[#c7c4d7]">{u.label}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <UpcomingTasks tasks={tasks} />
 
           {/* Mini consistency heatmap */}
           <MiniHeatmap />

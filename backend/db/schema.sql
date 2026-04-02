@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     due_date DATE,
     is_completed BOOLEAN DEFAULT false,
     completed_at TIMESTAMP,
+    goal_id INTEGER REFERENCES goals(id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -15,6 +15,7 @@ interface AnalyticsSummary {
   completed_goals: number;
   completion_rate: number;
   week_completions: number;
+  momentum: number;
 }
 
 interface ProgressData {
@@ -79,11 +80,11 @@ export default function Analytics() {
   }));
 
   const performanceData = [
+    { metric: 'Consistency', value: summary?.completion_rate || 0 },
     { metric: 'Tasks', value: (summary?.completed_tasks || 0) / (summary?.total_tasks || 1) * 100 },
     { metric: 'Habits', value: (summary?.total_habits || 0) * 10 },
     { metric: 'Goals', value: (summary?.completed_goals || 0) / (summary?.total_goals || 1) * 100 },
     { metric: 'Streaks', value: (summary?.week_completions || 0) * 2 },
-    { metric: 'Consistency', value: summary?.completion_rate || 0 },
   ];
 
   return (
@@ -94,10 +95,14 @@ export default function Analytics() {
           <h2 className="text-[32px] font-black text-[#e6edf3] tracking-tight">Analytics</h2>
           <p className="text-[#8b949e] text-[14px] mt-1 font-medium">Neural processing of your productivity architecture.</p>
         </div>
-        <div className="flex items-center gap-3 bg-[#161b22] px-4 py-2 rounded-full border border-[#30363d]">
-          <TrendingUp className="w-4 h-4 text-[#39d353]" />
-          <span className="text-[12px] font-black text-[#e6edf3]">EFFICIENCY: {summary?.completion_rate || 0}%</span>
-        </div>
+        {summary?.momentum !== undefined && (
+          <div className="flex items-center gap-3 bg-[#161b22] px-4 py-2 rounded-full border border-[#30363d]">
+            <TrendingUp className={`w-4 h-4 ${summary.momentum >= 0 ? 'text-[#39d353]' : 'text-[#f85149]'}`} />
+            <span className="text-[12px] font-black text-[#e6edf3]">
+              Momentum: <span className={summary.momentum >= 0 ? 'text-[#39d353]' : 'text-[#f85149]'}>{summary.momentum >= 0 ? '+' : ''}{summary.momentum}%</span> vs last week
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Stats Grid */}
@@ -177,16 +182,16 @@ export default function Analytics() {
         </div>
 
         {/* Skill/Performance Radar */}
-        <div className="bg-[#161b22] border border-[#30363d] rounded-[24px] p-8">
-          <h3 className="text-[20px] font-black text-[#e6edf3] flex items-center gap-2 mb-8">
+        <div className="lg:col-span-1 bg-[#161b22] border border-[#30363d] rounded-[24px] p-8 min-w-[400px]">
+          <h3 className="text-[18px] font-black text-[#e6edf3] flex items-center gap-2 mb-6">
             <PieChart className="w-5 h-5 text-[#bc8cff]" />
             Capacities
           </h3>
-          <div className="h-[350px] w-full flex items-center justify-center">
+          <div className="h-[320px] w-full flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="80%" data={performanceData}>
+              <RadarChart cx="50%" cy="50%" outerRadius="70%" data={performanceData}>
                 <PolarGrid stroke="#30363d" />
-                <PolarAngleAxis dataKey="metric" tick={{ fill: '#8b949e', fontSize: 11, fontWeight: 700 }} />
+                <PolarAngleAxis dataKey="metric" tick={{ fill: '#8b949e', fontSize: 11, fontWeight: 600 }} tickLine={false} />
                 <Radar
                   name="System"
                   dataKey="value"

@@ -4,14 +4,14 @@ from datetime import datetime
 
 class Task:
     @staticmethod
-    def create(user_id, title, description=None, category=None, priority='medium', due_date=None):
+    def create(user_id, title, description=None, category=None, priority='medium', due_date=None, goal_id=None):
         """Create a new task"""
         query = """
-            INSERT INTO tasks (user_id, title, description, category, priority, due_date)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO tasks (user_id, title, description, category, priority, due_date, goal_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             RETURNING *
         """
-        return execute_query(query, (user_id, title, description, category, priority, due_date), fetch_one=True)
+        return execute_query(query, (user_id, title, description, category, priority, due_date, goal_id), fetch_one=True)
 
     @staticmethod
     def get_all(user_id, is_completed=None):
@@ -71,3 +71,25 @@ class Task:
             ORDER BY due_date ASC
         """
         return execute_query(query, (user_id, start_date, end_date))
+
+    @staticmethod
+    def get_tasks_by_goal(user_id, goal_id):
+        """Get all tasks linked to a specific goal"""
+        query = "SELECT * FROM tasks WHERE user_id = %s AND goal_id = %s"
+        return execute_query(query, (user_id, goal_id))
+
+    @staticmethod
+    def calculate_metrics(user_id):
+        """Calculate task metrics"""
+        all_tasks = Task.get_all(user_id)
+        total_tasks = len(all_tasks)
+        completed_tasks = len([t for t in all_tasks if t.get('is_completed', False)])
+        remaining_tasks = total_tasks - completed_tasks
+        task_efficiency = round((completed_tasks / total_tasks) * 100, 1) if total_tasks > 0 else 0
+
+        return {
+            'total_tasks': total_tasks,
+            'completed_tasks': completed_tasks,
+            'remaining_tasks': remaining_tasks,
+            'task_efficiency': task_efficiency
+        }

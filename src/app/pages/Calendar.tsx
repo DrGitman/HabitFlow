@@ -32,9 +32,13 @@ export default function Calendar() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'day' | 'week' | 'month'>('month');
+  const [upcomingTasks, setUpcomingTasks] = useState<any[]>([]);
+  const [calendarStats, setCalendarStats] = useState<any>(null);
 
   useEffect(() => {
     fetchCalendarData();
+    fetchUpcomingTasks();
+    fetchCalendarStats();
   }, [currentMonth]);
 
   const fetchCalendarData = async () => {
@@ -45,12 +49,25 @@ export default function Calendar() {
       const response: any = await api.getCalendarData(start, end);
       
       let fetchedEvents: CalendarEvent[] = [];
-      if (Array.isArray(response)) {
-        fetchedEvents = response;
-      } else if (response && Array.isArray(response.events)) {
-        fetchedEvents = response.events;
-      } else if (response && Array.isArray(response.data)) {
-        fetchedEvents = response.data;
+      if (response && response.tasks) {
+        // Transform tasks
+        const taskEvents = (response.tasks || []).map((task: any) => ({
+          id: task.id,
+          type: 'task' as const,
+          title: task.title,
+          date: task.due_date,
+          is_completed: task.is_completed,
+          priority: task.priority
+        }));
+        // Transform habit completions
+        const habitEvents = (response.completions || []).map((c: any) => ({
+          id: c.id,
+          type: 'habit' as const,
+          title: c.name,
+          date: c.completion_date,
+          is_completed: true
+        }));
+        fetchedEvents = [...taskEvents, ...habitEvents];
       }
       
       setEvents(fetchedEvents);
@@ -59,6 +76,26 @@ export default function Calendar() {
       setEvents([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUpcomingTasks = async () => {
+    try {
+      const tasks = await api.getUpcomingTasks();
+      setUpcomingTasks(tasks as any[]);
+    } catch (error) {
+      console.error('Error fetching upcoming tasks:', error);
+      setUpcomingTasks([]);
+    }
+  };
+
+  const fetchCalendarStats = async () => {
+    try {
+      const stats = await api.getCalendarStats();
+      setCalendarStats(stats as any);
+    } catch (error) {
+      console.error('Error fetching calendar stats:', error);
+      setCalendarStats(null);
     }
   };
 
@@ -204,40 +241,30 @@ export default function Calendar() {
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
            <div className="space-y-6">
-              {/* Event 1 */}
-              <div>
-                 <p className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">08:00 AM</p>
-                 <div className="bg-[#161b22] rounded-[10px] p-4 group hover:border-[#ffffff1a] transition-all border border-[#ffffff0a]">
-                    <div className="flex justify-between items-start mb-2">
-                       <h4 className="text-[#ffffff] text-[14px] font-bold">Morning Reflection</h4>
-                       <span className="text-[#8b949e] text-[9px] font-medium bg-[#2d3449] opacity-80 px-2 py-0.5 rounded-[4px]">Mindset</span>
+              {upcomingTasks.length > 0 ? (
+                upcomingTasks.slice(0, 3).map((task: any) => (
+                  <div key={task.id}>
+                    <p className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">
+                      {task.due_date ? format(new Date(task.due_date), 'hh:mm a') : 'No time'}
+                    </p>
+                    <div className={`bg-[#161b22] rounded-[10px] p-4 group hover:border-[#ffffff1a] transition-all border ${task.is_completed ? 'border-[#39d353]/30' : 'border-[#ffffff0a]'}`}>
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="text-[#ffffff] text-[14px] font-bold">{task.title}</h4>
+                        {task.is_completed && (
+                          <div className="w-4 h-4 rounded-full bg-[#39d353] flex items-center justify-center">
+                            <CheckCircle2 className="w-3 h-3 text-[#161b22]" />
+                          </div>
+                        )}
+                      </div>
+                      {task.category && (
+                        <span className="text-[#8b949e] text-[9px] font-medium bg-[#2d3449] opacity-80 px-2 py-0.5 rounded-[4px]">{task.category}</span>
+                      )}
                     </div>
-                    <p className="text-[#8b949e] text-[12px]">Write 3 things you are grateful for today.</p>
-                 </div>
-              </div>
-              
-              {/* Event 2 */}
-              <div>
-                 <p className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">10:30 AM</p>
-                 <div className="bg-[#161b22] rounded-[10px] p-4 group hover:border-[#4edea3]/30 transition-all border border-[#ffffff0a]">
-                    <div className="flex justify-between items-start mb-2">
-                       <h4 className="text-[#ffffff] text-[14px] font-bold">Productivity Sprint</h4>
-                       <div className="w-4 h-4 rounded-full bg-[#4edea3] flex items-center justify-center">
-                          <CheckCircle2 className="w-3 h-3 text-[#161b22]" />
-                       </div>
-                    </div>
-                    <p className="text-[#8b949e] text-[12px]">Focus block: 90 minutes deep work.</p>
-                 </div>
-              </div>
-              
-              {/* Event 3 */}
-              <div>
-                 <p className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">02:00 PM</p>
-                 <div className="bg-[#161b22] rounded-[10px] p-4 group hover:border-[#ffffff1a] transition-all border border-[#ffffff0a]">
-                    <h4 className="text-[#ffffff] text-[14px] font-bold mb-2">Hydration Goal</h4>
-                    <p className="text-[#8b949e] text-[12px]">Drink 2.5L throughout the day.</p>
-                 </div>
-              </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-[#8b949e] text-[12px]">No upcoming tasks</p>
+              )}
 
               {/* Cover image area */}
               <div className="pt-4">
@@ -282,8 +309,10 @@ export default function Calendar() {
            <div className="bg-[#11141d] rounded-[16px] p-6 border border-[#ffffff0a]">
               <h4 className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">Focus Score</h4>
               <div className="flex items-end gap-2">
-                 <span className="text-[32px] font-bold text-[#ffffff] leading-none">84%</span>
-                 <span className="text-[#39d353] text-[12px] font-medium mb-1">+12% vs last month</span>
+                 <span className="text-[32px] font-bold text-[#ffffff] leading-none">{calendarStats?.focus_score || 0}%</span>
+                 <span className={`text-[12px] font-medium mb-1 ${(calendarStats?.focus_change || 0) >= 0 ? 'text-[#39d353]' : 'text-[#f85149]'}`}>
+                   {(calendarStats?.focus_change || 0) >= 0 ? '+' : ''}{calendarStats?.focus_change || 0}% vs last month
+                 </span>
               </div>
            </div>
            
@@ -294,8 +323,10 @@ export default function Calendar() {
                     <CheckCircle2 className="w-4 h-4 text-[#39d353]" />
                  </div>
                  <div>
-                    <h5 className="text-[#ffffff] text-[14px] font-bold">Daily Meditation</h5>
-                    <p className="text-[#8b949e] text-[11px]">24/31 days completed</p>
+                    <h5 className="text-[#ffffff] text-[14px] font-bold">{calendarStats?.top_habit?.name || 'No habits'}</h5>
+                    <p className="text-[#8b949e] text-[11px]">
+                      {calendarStats?.top_habit?.completions || 0}/{calendarStats?.top_habit?.total_days || 0} days completed
+                    </p>
                  </div>
               </div>
            </div>
@@ -303,7 +334,7 @@ export default function Calendar() {
            <div className="bg-[#7d79ff] rounded-[16px] p-6 shadow-lg">
               <h4 className="text-[#e6edf3] text-[10px] font-bold uppercase tracking-wider opacity-80 mb-2">Current Streak</h4>
               <div className="flex items-end gap-2">
-                 <span className="text-[32px] font-bold text-[#ffffff] leading-none">12</span>
+                 <span className="text-[32px] font-bold text-[#ffffff] leading-none">{calendarStats?.current_streak || 0}</span>
                  <span className="text-[#e6edf3] opacity-80 text-[12px] font-medium mb-1">Days in a row</span>
               </div>
            </div>
