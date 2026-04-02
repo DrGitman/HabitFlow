@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router';
-import { Home, CheckSquare, Flame, BarChart3, LogOut, Calendar, User, Settings, Bell, Plus } from 'lucide-react';
+import { Home, Zap, BarChart3, LogOut, Calendar, Settings, Plus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Navigation() {
@@ -8,10 +8,10 @@ export default function Navigation() {
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: Home },
-    { name: 'Tasks', path: '/tasks', icon: CheckSquare },
+    { name: 'Actions',   path: '/actions', icon: Zap },
     { name: 'Analytics', path: '/analytics', icon: BarChart3 },
-    { name: 'Calendar', path: '/calendar', icon: Calendar },
-    { name: 'Settings', path: '/settings', icon: Settings },
+    { name: 'Calendar',  path: '/calendar', icon: Calendar },
+    { name: 'Settings',  path: '/settings', icon: Settings },
   ];
 
   const profileItems: any[] = [];
@@ -33,7 +33,10 @@ export default function Navigation() {
       <div className="flex-1 px-4 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = location.pathname === item.path;
+          const isActive =
+            item.path === '/'
+              ? location.pathname === '/'
+              : location.pathname.startsWith(item.path);
 
           return (
             <Link

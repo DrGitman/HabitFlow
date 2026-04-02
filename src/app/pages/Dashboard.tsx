@@ -19,6 +19,13 @@ interface ProgressData {
   count: number;
 }
 
+interface RecentActivity {
+  type: string;
+  label: string;
+  category: string;
+  occurred_at: string | null;
+}
+
 interface StreakData {
   habit_id: number;
   habit_name: string;
@@ -50,6 +57,7 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [progressData, setProgressData] = useState<ProgressData[]>([]);
   const [streakData, setStreakData] = useState<StreakData[]>([]);
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -59,15 +67,17 @@ export default function Dashboard() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [summaryRes, progressRes, streaksRes] = await Promise.all([
+      const [summaryRes, progressRes, streaksRes, activityRes] = await Promise.all([
         api.getAnalyticsSummary(),
         api.getAnalyticsProgress(),
         api.getAnalyticsStreaks(),
+        api.getRecentActivity(),
       ]);
 
       setSummary(summaryRes as AnalyticsSummary);
       setProgressData(progressRes as ProgressData[]);
       setStreakData(streaksRes as StreakData[]);
+      setRecentActivity(activityRes as RecentActivity[]);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -122,8 +132,8 @@ export default function Dashboard() {
       {/* Stats Summary Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {[
-          { label: 'Total Tasks', value: summary?.total_tasks || 0, color: '#7c79ff', path: '/tasks', icon: Activity },
-          { label: 'Completed', value: summary?.completed_tasks || 0, color: '#39d353', path: '/tasks', icon: CheckCircle2 },
+          { label: 'Total Tasks', value: summary?.total_tasks || 0, color: '#7c79ff', path: '/actions', icon: Activity },
+          { label: 'Completed', value: summary?.completed_tasks || 0, color: '#39d353', path: '/actions', icon: CheckCircle2 },
           { label: 'Efficiency', value: `${summary?.completion_rate || 0}%`, color: '#ff7b72', path: '/analytics', icon: TrendingUp }
         ].map((stat, i) => (
           <button 
@@ -273,46 +283,44 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-8">
           <h3 className="text-[18px] font-bold text-[#e6edf3]">Recent Activity</h3>
         </div>
-        
-        <div className="space-y-6">
-          {/* Activity Item 1 */}
-          <div className="flex gap-4">
-            <div className="mt-1.5 flex flex-col items-center">
-              <div className="w-2 h-2 rounded-full bg-[#39d353]" />
-            </div>
-            <div>
-              <p className="text-[#e6edf3] text-[14px]">Completed "Daily Morning Stretch"</p>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-[#8b949e] text-[11px]">2 hours ago • Routine</p>
-              </div>
-            </div>
-          </div>
-          
-          {/* Activity Item 2 */}
-          <div className="flex gap-4">
-            <div className="mt-1.5 flex flex-col items-center">
-              <div className="w-2 h-2 rounded-full bg-[#7c79ff]" />
-            </div>
-            <div>
-              <p className="text-[#e6edf3] text-[14px]">New Goal Created: "Read 12 Books in 2024"</p>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-[#8b949e] text-[11px]">5 hours ago • Goals</p>
-              </div>
-            </div>
-          </div>
 
-          {/* Activity Item 3 */}
-          <div className="flex gap-4">
-            <div className="mt-1.5 flex flex-col items-center">
-              <div className="w-2 h-2 rounded-full bg-[#39d353]" />
+        <div className="space-y-6">
+          {recentActivity.length > 0 ? (
+            recentActivity.slice(0, 6).map((event, i) => {
+              const dotColor = event.type === 'task' ? '#7c79ff' : '#39d353';
+              const timeAgo = event.occurred_at
+                ? (() => {
+                    const diff = Date.now() - new Date(event.occurred_at).getTime();
+                    const mins = Math.floor(diff / 60000);
+                    const hrs = Math.floor(mins / 60);
+                    const days = Math.floor(hrs / 24);
+                    if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
+                    if (hrs > 0) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+                    return `${mins} minute${mins !== 1 ? 's' : ''} ago`;
+                  })()
+                : 'Recently';
+              return (
+                <div key={i} className="flex gap-4">
+                  <div className="mt-1.5 flex flex-col items-center">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: dotColor }} />
+                  </div>
+                  <div>
+                    <p className="text-[#e6edf3] text-[14px]">
+                      {event.type === 'task' ? 'Completed task' : 'Completed habit'}: &ldquo;{event.label}&rdquo;
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-[#8b949e] text-[11px]">{timeAgo} &bull; {event.category}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="flex flex-col items-center justify-center py-8 opacity-40">
+              <Zap className="w-8 h-8 text-[#8b949e] mb-3" />
+              <p className="text-[#8b949e] text-[13px] uppercase tracking-widest">No recent activity yet</p>
             </div>
-            <div>
-              <p className="text-[#e6edf3] text-[14px]">Streak Milestone: "7 Days Hydrated"</p>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-[#8b949e] text-[11px]">Yesterday • Achievements</p>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

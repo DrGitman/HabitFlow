@@ -28,15 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing token on mount
-    const storedToken = localStorage.getItem('auth_token');
-    const storedUser = localStorage.getItem('user');
-
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
-    }
-
+    // No persistence: always start unauthenticated so login is required on every new session
     setIsLoading(false);
   }, []);
 
@@ -44,23 +36,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response: any = await api.login(email, password);
     setToken(response.token);
     setUser(response.user);
-    localStorage.setItem('auth_token', response.token);
-    localStorage.setItem('user', JSON.stringify(response.user));
+    // Token kept in memory only — no localStorage
   };
 
   const signup = async (email: string, password: string, fullName?: string) => {
     const response: any = await api.signup(email, password, fullName);
     setToken(response.token);
     setUser(response.user);
-    localStorage.setItem('auth_token', response.token);
-    localStorage.setItem('user', JSON.stringify(response.user));
+    // Token kept in memory only — no localStorage
   };
 
   const logout = () => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user');
   };
 
   return (

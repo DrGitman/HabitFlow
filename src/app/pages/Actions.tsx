@@ -1,0 +1,55 @@
+import { useState } from 'react';
+import { CheckSquare, Trophy, RefreshCw } from 'lucide-react';
+import Tasks from './Tasks';
+import Goals from './Goals';
+import Habits from './Habits';
+
+type Tab = 'tasks' | 'goals' | 'habits';
+
+const tabs: { id: Tab; label: string; Icon: React.ElementType }[] = [
+  { id: 'tasks',  label: 'Tasks',  Icon: CheckSquare },
+  { id: 'goals',  label: 'Goals',  Icon: Trophy      },
+  { id: 'habits', label: 'Habits', Icon: RefreshCw   },
+];
+
+export default function Actions() {
+  const [activeTab, setActiveTab] = useState<Tab>('tasks');
+
+  return (
+    <div className="p-10 max-w-[1200px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 font-['Inter']">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mt-4">
+
+        {/* ── Left: vertical tab nav (mirrors Settings sidebar) ── */}
+        <div className="col-span-1 flex flex-col gap-[8px] items-start self-start w-full">
+          {tabs.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`w-full flex items-center gap-[12px] px-[16px] py-[12px] rounded-[12px] transition-all text-[14px] ${
+                activeTab === id
+                  ? 'bg-[#222a3d] text-[#c2c1ff] font-semibold'
+                  : 'text-[#c7c4d7] hover:bg-[#222a3d]/50 font-normal'
+              }`}
+            >
+              <Icon className="w-[15px] h-[15px]" />
+              <span className="leading-[20px]">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* ── Right: content area ──
+            Each sub-page (Tasks / Goals / Habits) adds its own top-level p-8.
+            We use a negative margin wrapper to cancel that padding so content
+            aligns flush inside the grid column, identical to how Settings works. */}
+        <div className="col-span-3 w-full overflow-hidden">
+          <div className="-mx-8 -mt-8">
+            {activeTab === 'tasks'  && <Tasks />}
+            {activeTab === 'goals'  && <Goals />}
+            {activeTab === 'habits' && <Habits />}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}

@@ -2,10 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navigation from './components/Navigation';
 import TopBar from './components/TopBar';
-import QuickAddFAB from './components/QuickAddFAB';
 import Dashboard from './pages/Dashboard';
-import Tasks from './pages/Tasks';
-import Habits from './pages/Habits';
+import Actions from './pages/Actions';
 import Analytics from './pages/Analytics';
 import Calendar from './pages/Calendar';
 import Notifications from './pages/Notifications';
@@ -23,7 +21,6 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
         <main className="flex-1 relative">
           {children}
         </main>
-        <QuickAddFAB />
       </div>
     </div>
   );
@@ -72,21 +69,16 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/tasks"
+        path="/actions"
         element={
           <ProtectedRoute>
-            <Tasks />
+            <Actions />
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/habits"
-        element={
-          <ProtectedRoute>
-            <Habits />
-          </ProtectedRoute>
-        }
-      />
+      {/* Legacy redirects */}
+      <Route path="/tasks"  element={<Navigate to="/actions" replace />} />
+      <Route path="/habits" element={<Navigate to="/actions" replace />} />
       <Route
         path="/analytics"
         element={

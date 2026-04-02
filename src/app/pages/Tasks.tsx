@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../services/api';
-import { Plus, Check, Trash2, Edit2, Calendar as CalendarIcon, Clock, Tag, AlertCircle, CheckCircle2 } from 'lucide-react';
+import {
+  Check, Plus, Clock, CheckCircle2, Trash2, Edit2, Tag,
+} from 'lucide-react';
 
 interface Task {
   id: number;
@@ -13,322 +15,341 @@ interface Task {
   created_at: string;
 }
 
-export default function Tasks() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    category: '',
-    priority: 'medium' as 'low' | 'medium' | 'high',
-    due_date: '',
-  });
+// ── Priority badge meta matching reference image ──────────────────────────
+const PRIORITY_META = {
+  high:   { label: 'HIGH PRIORITY', bg: '#1e3a5f', text: '#60a5fa' },
+  medium: { label: 'WORK',          bg: '#1a2a1a', text: '#4ade80' },
+  low:    { label: 'PERSONAL',      bg: '#2d1a3d', text: '#c084fc' },
+};
+
+// Pomodoro timer display
+function FocusMode() {
+  const [seconds, setSeconds] = useState(25 * 60);
+  const [running, setRunning] = useState(false);
 
   useEffect(() => {
-    fetchTasks();
-  }, []);
+    if (!running) return;
+    const id = setInterval(() => setSeconds(s => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [running]);
+
+  const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+  const ss = String(seconds % 60).padStart(2, '0');
+
+  return (
+    <div className="bg-[#171f33] border border-[#ffffff08] rounded-[14px] overflow-hidden">
+      <div className="px-5 pt-4 pb-1">
+        <p className="text-[11px] font-black uppercase tracking-widest text-[#c7c4d7]">Focus Mode</p>
+      </div>
+      {/* Pomodoro display */}
+      <div
+        className="mx-5 my-3 rounded-[10px] flex flex-col items-center justify-center py-8 relative overflow-hidden"
+        style={{ background: 'radial-gradient(ellipse at 50% 60%, #1a3040 0%, #0d1117 80%)' }}
+      >
+        {/* Glow circle */}
+        <div className="absolute w-32 h-32 rounded-full bg-[#22c55e]/10 blur-2xl top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+        <span className="text-[42px] font-black text-white tracking-tight leading-none relative z-10">
+          {mm}:{ss}
+        </span>
+        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#22c55e] mt-1 relative z-10">
+          {running ? 'POMODORO ACTIVE' : 'READY'}
+        </span>
+      </div>
+      <div className="px-5 pb-5">
+        <button
+          onClick={() => setRunning(r => !r)}
+          className="w-full bg-[#222a3d] hover:bg-[#2d3449] text-[#c7c4d7] text-[13px] font-bold py-2.5 rounded-[8px] transition-all"
+        >
+          {running ? 'Pause Session' : 'Start Session'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Mini heatmap (7×2 grid)
+function MiniHeatmap() {
+  const cells = Array.from({ length: 14 }, (_, i) => {
+    const v = Math.random();
+    if (v < 0.1) return '#6b2737'; // missed
+    if (v < 0.25) return '#1f3a2a';
+    if (v < 0.5)  return '#27ae60';
+    return '#2ecc71';
+  });
+  return (
+    <div className="bg-[#171f33] border border-[#ffffff08] rounded-[14px] p-5">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[10px] font-black uppercase tracking-widest text-[#8b949e]">Consistency</p>
+        <span className="text-[13px] font-black text-[#22c55e]">84%</span>
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((color, i) => (
+          <div key={i} className="h-5 rounded-[4px]" style={{ backgroundColor: color }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Upcoming panel
+const UPCOMING = [
+  { when: 'Tomorrow, 10:00 AM', label: 'Client Review Meeting' },
+  { when: 'Wed, Jun 14',        label: 'Renew Software Licenses' },
+];
+
+type Filter = 'all' | 'work' | 'personal';
+
+export default function Tasks() {
+  const [tasks,       setTasks]       = useState<Task[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [filter,      setFilter]      = useState<Filter>('all');
+  const [showForm,    setShowForm]    = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [formData,    setFormData]    = useState({
+    title: '', description: '', category: '', priority: 'medium' as Task['priority'], due_date: '',
+  });
+
+  useEffect(() => { fetchTasks(); }, []);
 
   const fetchTasks = async () => {
     try {
       setLoading(true);
       const data = await api.getTasks();
       setTasks(data as Task[]);
-    } catch (error) {
-      console.error('Error fetching tasks:', error);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   };
 
+  const handleComplete = async (id: number, done: boolean) => {
+    try { await api.completeTask(id, !done); fetchTasks(); } catch (e) { console.error(e); }
+  };
+  const handleDelete = async (id: number) => {
+    if (confirm('Delete this task?')) { try { await api.deleteTask(id); fetchTasks(); } catch (e) { console.error(e); } }
+  };
+  const handleEdit = (t: Task) => {
+    setEditingTask(t);
+    setFormData({ title: t.title, description: t.description || '', category: t.category || '', priority: t.priority, due_date: t.due_date || '' });
+    setShowForm(true);
+  };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (editingTask) {
-        await api.updateTask(editingTask.id, formData);
-      } else {
-        await api.createTask(formData);
-      }
+      if (editingTask) await api.updateTask(editingTask.id, formData);
+      else await api.createTask(formData);
       setFormData({ title: '', description: '', category: '', priority: 'medium', due_date: '' });
-      setShowForm(false);
-      setEditingTask(null);
-      fetchTasks();
-    } catch (error) {
-      console.error('Error saving task:', error);
-    }
+      setShowForm(false); setEditingTask(null); fetchTasks();
+    } catch (e) { console.error(e); }
   };
 
-  const handleComplete = async (taskId: number, isCompleted: boolean) => {
-    try {
-      await api.completeTask(taskId, !isCompleted);
-      fetchTasks();
-    } catch (error) {
-      console.error('Error updating task:', error);
-    }
+  // Map priority → filter bucket
+  const filterBucket = (t: Task): Filter => {
+    if (t.priority === 'high') return 'work';
+    if (t.priority === 'low') return 'personal';
+    return 'all';
   };
 
-  const handleDelete = async (taskId: number) => {
-    if (confirm('Are you sure you want to delete this task?')) {
-      try {
-        await api.deleteTask(taskId);
-        fetchTasks();
-      } catch (error) {
-        console.error('Error deleting task:', error);
-      }
-    }
-  };
+  const visible = tasks.filter(t => filter === 'all' || filterBucket(t) === filter);
+  const pending   = visible.filter(t => !t.is_completed);
+  const completed = visible.filter(t => t.is_completed);
 
-  const handleEdit = (task: Task) => {
-    setEditingTask(task);
-    setFormData({
-      title: task.title,
-      description: task.description || '',
-      category: task.category || '',
-      priority: task.priority,
-      due_date: task.due_date || '',
-    });
-    setShowForm(true);
+  // Format time from due_date or created_at
+  const fmtTime = (iso?: string) => {
+    if (!iso) return null;
+    try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+    catch { return null; }
   };
-
-  const priorityMeta = {
-    low: { color: '#8b949e', bg: '#21262d' },
-    medium: { color: '#58a6ff', bg: '#1f6feb20' },
-    high: { color: '#f85149', bg: '#f8514910' },
-  };
-
-  const pendingTasks = tasks.filter(t => !t.is_completed);
-  const completedTasks = tasks.filter(t => t.is_completed);
 
   return (
-    <div className="p-8 space-y-8 animate-in fade-in duration-700">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-[32px] font-black text-[#e6edf3] tracking-tight">Tasks</h2>
-        <button
-          onClick={() => {
-            setShowForm(!showForm);
-            setEditingTask(null);
-            setFormData({ title: '', description: '', category: '', priority: 'medium', due_date: '' });
-          }}
-          className="bg-[#58a6ff] hover:bg-[#4a9eff] text-[#0d1117] font-bold px-6 py-3 rounded-[10px] flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-[#58a6ff]/10"
-        >
-          <Plus className="w-5 h-5" />
-          <span>New Task</span>
-        </button>
+    <div className="p-8 animate-in fade-in duration-700 font-['Inter']">
+      {/* ── Header ─────────────────────────────────── */}
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h2 className="text-[28px] font-black text-[#dae2fd] tracking-tight">My Tasks</h2>
+          <p className="text-[#8b949e] text-[13px] mt-0.5">
+            Review and execute your <span className="text-[#c7c4d7] italic">daily</span> objectives.
+          </p>
+        </div>
+        {/* Filter tabs */}
+        <div className="flex bg-[#171f33] border border-[#ffffff08] rounded-[10px] p-1 gap-1">
+          {(['all', 'work', 'personal'] as Filter[]).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-4 py-1.5 rounded-[7px] text-[12px] font-bold capitalize transition-all ${
+                filter === f ? 'bg-[#7c79ff] text-white' : 'text-[#8b949e] hover:text-[#c7c4d7]'
+              }`}
+            >
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Task Form Modal-like */}
-      {showForm && (
-        <div className="bg-[#161b22] border border-[#30363d] rounded-[12px] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
-          <h3 className="text-[20px] font-bold text-[#e6edf3] mb-6">
-            {editingTask ? 'Edit Task' : 'Create New Task'}
-          </h3>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[#8b949e] text-[12px] font-bold uppercase tracking-widest mb-2">Title</label>
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    className="w-full bg-[#0d1117] text-[#e6edf3] px-4 py-3 rounded-[8px] border border-[#30363d] focus:border-[#58a6ff] focus:outline-none transition-all"
-                    placeholder="What needs to be done?"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-[#8b949e] text-[12px] font-bold uppercase tracking-widest mb-2">Description</label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full bg-[#0d1117] text-[#e6edf3] px-4 py-3 rounded-[8px] border border-[#30363d] focus:border-[#58a6ff] focus:outline-none transition-all"
-                    placeholder="Add some details..."
-                    rows={4}
-                  />
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[#8b949e] text-[12px] font-bold uppercase tracking-widest mb-2">Category</label>
-                  <div className="relative">
-                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e]" />
-                    <input
-                      type="text"
-                      value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      className="w-full bg-[#0d1117] text-[#e6edf3] pl-10 pr-4 py-3 rounded-[8px] border border-[#30363d] focus:border-[#58a6ff] focus:outline-none transition-all"
-                      placeholder="e.g. Work, Health..."
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[#8b949e] text-[12px] font-bold uppercase tracking-widest mb-2">Priority</label>
-                    <select
-                      value={formData.priority}
-                      onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
-                      className="w-full bg-[#0d1117] text-[#e6edf3] px-4 py-3 rounded-[8px] border border-[#30363d] focus:border-[#58a6ff] focus:outline-none transition-all"
-                    >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[#8b949e] text-[12px] font-bold uppercase tracking-widest mb-2">Due Date</label>
-                    <input
-                      type="date"
-                      value={formData.due_date}
-                      onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                      className="w-full bg-[#0d1117] text-[#e6edf3] px-4 py-3 rounded-[8px] border border-[#30363d] focus:border-[#58a6ff] focus:outline-none transition-all"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-4 pt-4">
-              <button
-                type="submit"
-                className="bg-[#2ea043] hover:bg-[#2c974b] text-[#ffffff] font-bold px-8 py-3 rounded-[10px] transition-all active:scale-95"
-              >
-                {editingTask ? 'Save Changes' : 'Create Task'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditingTask(null);
-                }}
-                className="bg-[#21262d] hover:bg-[#30363d] text-[#e6edf3] font-bold px-8 py-3 rounded-[10px] transition-all"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      {/* ── Two columns ────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-6">
 
-      {/* Task Lists Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Active Tasks */}
-        <div className="space-y-6">
-          <h3 className="text-[18px] font-bold text-[#e6edf3] flex items-center gap-2">
-            <Clock className="w-5 h-5 text-[#58a6ff]" />
-            Active Tasks
-            <span className="ml-2 text-[12px] bg-[#21262d] text-[#8b949e] px-2 py-0.5 rounded-full">{pendingTasks.length}</span>
-          </h3>
-          <div className="space-y-4">
-            {pendingTasks.map((task) => (
+        {/* LEFT — task list */}
+        <div className="flex flex-col gap-2">
+          {/* Pending tasks */}
+          {pending.map(task => {
+            const pm  = PRIORITY_META[task.priority];
+            const t   = fmtTime(task.due_date || task.created_at);
+            return (
               <div
                 key={task.id}
-                className="bg-[#161b22] border border-[#30363d] rounded-[12px] p-6 hover:border-[#58a6ff]/30 transition-all group relative"
+                className="group bg-[#171f33] border border-[#ffffff08] hover:border-[#ffffff15] rounded-[12px] px-5 py-4 flex items-center gap-4 transition-all"
               >
-                <div className="flex items-start gap-4">
-                  <button
-                    onClick={() => handleComplete(task.id, task.is_completed)}
-                    className="mt-1 w-6 h-6 rounded-[6px] border-2 border-[#30363d] flex items-center justify-center hover:border-[#58a6ff] transition-all bg-[#0d1117]"
-                  >
-                    {task.is_completed && <Check className="w-4 h-4 text-[#58a6ff]" />}
-                  </button>
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <h4 className="text-[17px] font-bold text-[#e6edf3] group-hover:text-[#58a6ff] transition-colors">{task.title}</h4>
-                        {(!task.is_completed && task.due_date && new Date(task.due_date) < new Date(new Date().setHours(0,0,0,0))) && (
-                          <span className="text-[10px] font-black uppercase tracking-widest bg-[#f8514920] text-[#f85149] px-2 py-0.5 rounded-[4px] border border-[#f8514930] animate-pulse">
-                            Expired
-                          </span>
-                        )}
-                      </div>
-                      <span 
-                        className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-[4px]"
-                        style={{ backgroundColor: priorityMeta[task.priority].bg, color: priorityMeta[task.priority].color }}
-                      >
-                        {task.priority}
-                      </span>
-                    </div>
-                    {task.description && (
-                      <p className="text-[#8b949e] text-[14px] leading-relaxed line-clamp-2">{task.description}</p>
-                    )}
-                    <div className="flex items-center gap-4 pt-2">
-                      {task.category && (
-                        <div className="flex items-center gap-1.5 text-[12px] text-[#8b949e]">
-                          <Tag className="w-3.5 h-3.5" />
-                          {task.category}
-                        </div>
-                      )}
-                      {task.due_date && (
-                        <div className="flex items-center gap-1.5 text-[12px] text-[#8b949e]">
-                          <CalendarIcon className="w-3.5 h-3.5" />
-                          {new Date(task.due_date).toLocaleDateString()}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => handleEdit(task)}
-                      className="p-2 hover:bg-[#21262d] rounded-[6px] text-[#8b949e] hover:text-[#58a6ff] transition-all"
-                      title="Edit Task"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(task.id)}
-                      className="p-2 hover:bg-[#21262d] rounded-[6px] text-[#8b949e] hover:text-[#f85149] transition-all"
-                      title="Delete Task"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {pendingTasks.length === 0 && !loading && (
-              <div className="flex flex-col items-center justify-center py-20 bg-[#161b22]/50 rounded-[12px] border border-dashed border-[#30363d]">
-                <CheckCircle2 className="w-12 h-12 text-[#30363d] mb-4" />
-                <p className="text-[#8b949e] font-medium">All cleared! Time for the next architect move.</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Completed Tasks */}
-        <div className="space-y-6">
-          <h3 className="text-[18px] font-bold text-[#8b949e] flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5" />
-            Archive
-            <span className="ml-2 text-[12px] bg-[#21262d] text-[#8b949e]/50 px-2 py-0.5 rounded-full">{completedTasks.length}</span>
-          </h3>
-          <div className="space-y-3">
-            {completedTasks.slice(0, 8).map((task) => (
-              <div
-                key={task.id}
-                className="bg-[#0d1117] border border-[#30363d] rounded-[10px] p-4 flex items-center gap-4 opacity-50 hover:opacity-80 transition-all"
-              >
+                {/* Checkbox */}
                 <button
                   onClick={() => handleComplete(task.id, task.is_completed)}
-                  className="w-5 h-5 rounded-[4px] bg-[#2ea043] flex items-center justify-center text-[#0d1117]"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                </button>
-                <div className="flex-1">
-                  <h4 className="text-[15px] font-medium text-[#e6edf3] line-through">{task.title}</h4>
+                  className="w-5 h-5 rounded-[5px] border-2 border-[#ffffff20] flex items-center justify-center shrink-0 hover:border-[#7c79ff] transition-colors"
+                />
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-[14px] font-semibold text-[#dae2fd] truncate">{task.title}</p>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <span
+                      className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-[4px]"
+                      style={{ backgroundColor: pm.bg, color: pm.text }}
+                    >
+                      {pm.label}
+                    </span>
+                    {t && (
+                      <span className="flex items-center gap-1 text-[11px] text-[#8b949e]">
+                        <Clock className="w-3 h-3" /> {t}
+                      </span>
+                    )}
+                    {task.category && (
+                      <span className="flex items-center gap-1 text-[11px] text-[#8b949e]">
+                        <Tag className="w-3 h-3" /> {task.category}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <button
-                  onClick={() => handleDelete(task.id)}
-                  className="p-2 hover:bg-[#21262d] rounded-[6px] text-[#8b949e] hover:text-[#f85149] transition-all"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+
+                {/* Actions */}
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => handleEdit(task)} className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#7c79ff] transition-all">
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => handleDelete(task.id)} className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#f85149] transition-all">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-            ))}
-            {completedTasks.length > 8 && (
-              <p className="text-center text-[12px] text-[#8b949e] py-2">Plus {completedTasks.length - 8} more completed tasks</p>
-            )}
+            );
+          })}
+
+          {/* Completed tasks */}
+          {completed.map(task => (
+            <div
+              key={task.id}
+              className="group bg-[#0f1520] border border-[#ffffff05] rounded-[12px] px-5 py-4 flex items-center gap-4 opacity-60 hover:opacity-80 transition-all"
+            >
+              <button
+                onClick={() => handleComplete(task.id, task.is_completed)}
+                className="w-5 h-5 rounded-[5px] bg-[#7c79ff] flex items-center justify-center shrink-0"
+              >
+                <Check className="w-3.5 h-3.5 text-white" />
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] font-medium text-[#8b949e] line-through truncate">{task.title}</p>
+                <p className="text-[11px] text-[#8b949e]/60 mt-0.5 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-[#22c55e]" />
+                  Completed {fmtTime(task.created_at)}
+                </p>
+              </div>
+              <button onClick={() => handleDelete(task.id)} className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#f85149] opacity-0 group-hover:opacity-100 transition-all">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+
+          {/* Empty state */}
+          {!loading && pending.length === 0 && completed.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 border border-dashed border-[#ffffff10] rounded-[12px]">
+              <CheckCircle2 className="w-10 h-10 text-[#ffffff15] mb-3" />
+              <p className="text-[#8b949e] text-[13px]">All clear — no tasks yet.</p>
+            </div>
+          )}
+
+          {/* Add new task */}
+          {!showForm ? (
+            <button
+              onClick={() => { setShowForm(true); setEditingTask(null); }}
+              className="mt-2 w-full border border-dashed border-[#ffffff15] hover:border-[#7c79ff]/40 rounded-[12px] py-3.5 flex items-center justify-center gap-2 text-[13px] text-[#8b949e] hover:text-[#c2c1ff] transition-all"
+            >
+              <Plus className="w-4 h-4" /> Add New Task
+            </button>
+          ) : (
+            <div className="mt-2 bg-[#171f33] border border-[#ffffff0a] rounded-[12px] p-5 animate-in zoom-in-95 duration-200">
+              <h4 className="text-[15px] font-bold text-[#dae2fd] mb-4">{editingTask ? 'Edit Task' : 'New Task'}</h4>
+              <form onSubmit={handleSubmit} className="space-y-3">
+                <input
+                  type="text" value={formData.title} placeholder="Task title..."
+                  onChange={e => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full bg-[#0d1117] text-[#dae2fd] px-4 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none text-[13px] transition-all"
+                  required
+                />
+                <div className="grid grid-cols-3 gap-3">
+                  <select
+                    value={formData.priority}
+                    onChange={e => setFormData({ ...formData, priority: e.target.value as Task['priority'] })}
+                    className="col-span-1 bg-[#0d1117] text-[#dae2fd] px-3 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none text-[13px]"
+                  >
+                    <option value="high">High Priority</option>
+                    <option value="medium">Work</option>
+                    <option value="low">Personal</option>
+                  </select>
+                  <input
+                    type="text" value={formData.category} placeholder="Category"
+                    onChange={e => setFormData({ ...formData, category: e.target.value })}
+                    className="col-span-1 bg-[#0d1117] text-[#dae2fd] px-3 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none text-[13px]"
+                  />
+                  <input
+                    type="date" value={formData.due_date}
+                    onChange={e => setFormData({ ...formData, due_date: e.target.value })}
+                    className="col-span-1 bg-[#0d1117] text-[#dae2fd] px-3 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none text-[13px]"
+                  />
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <button type="submit" className="bg-[#7c79ff] hover:bg-[#6d69f0] text-white font-bold px-6 py-2 rounded-[8px] text-[13px] transition-all active:scale-95">
+                    {editingTask ? 'Save' : 'Create'}
+                  </button>
+                  <button type="button" onClick={() => { setShowForm(false); setEditingTask(null); }}
+                    className="bg-[#222a3d] hover:bg-[#2d3449] text-[#c7c4d7] font-bold px-6 py-2 rounded-[8px] text-[13px] transition-all">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT — sidebar */}
+        <div className="flex flex-col gap-4">
+          {/* Focus Mode / Pomodoro */}
+          <FocusMode />
+
+          {/* Upcoming */}
+          <div className="bg-[#171f33] border border-[#ffffff08] rounded-[14px] p-5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#8b949e] mb-4">Upcoming</p>
+            <div className="flex flex-col gap-3">
+              {UPCOMING.map(u => (
+                <div key={u.label} className="flex gap-3">
+                  <div className="w-[3px] rounded-full bg-[#7c79ff] shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[11px] text-[#8b949e]">{u.when}</p>
+                    <p className="text-[13px] font-semibold text-[#c7c4d7]">{u.label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
+
+          {/* Mini consistency heatmap */}
+          <MiniHeatmap />
         </div>
       </div>
     </div>

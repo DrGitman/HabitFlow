@@ -257,6 +257,10 @@ class ApiService {
   async getAchievements() {
     return this.request('/api/profile/achievements');
   }
+
+  async getRecentActivity() {
+    return this.request('/api/recent-activity');
+  }
 }
 
 export const api = new ApiService();

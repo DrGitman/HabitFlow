@@ -246,7 +246,8 @@ async def delete_goal(goal_id: int, user_id: int = Depends(get_current_user_id))
 @app.get("/api/analytics/summary")
 async def get_analytics_summary(user_id: int = Depends(get_current_user_id)):
     total_habits = len(Habit.get_all(user_id))
-    total_tasks = len(Task.get_all(user_id, is_completed=False))
+    # total_tasks = ALL tasks ever created (completed is a subset of total)
+    total_tasks = len(Task.get_all(user_id))
     completed_tasks = len(Task.get_all(user_id, is_completed=True))
     total_goals = len(Goal.get_all(user_id, is_completed=False))
     completed_goals = len(Goal.get_all(user_id, is_completed=True))
@@ -365,6 +366,51 @@ async def delete_notification(notification_id: int, user_id: int = Depends(get_c
     query = "DELETE FROM notifications WHERE id = %s AND user_id = %s"
     execute_query(query, (notification_id, user_id))
     return {'message': 'Notification deleted'}
+
+@app.get("/api/recent-activity")
+async def get_recent_activity(user_id: int = Depends(get_current_user_id)):
+    """Return most recent 10 activity events: task completions + habit completions"""
+    task_query = """
+        SELECT 'task' as type, title as label, 'Tasks' as category,
+               COALESCE(completed_at, updated_at, created_at) as occurred_at
+        FROM tasks
+        WHERE user_id = %s AND is_completed = true
+        ORDER BY COALESCE(completed_at, updated_at, created_at) DESC
+        LIMIT 5
+    """
+    habit_query = """
+        SELECT 'habit' as type, h.name as label, 'Habits' as category,
+               hc.completed_at as occurred_at
+        FROM habit_completions hc
+        JOIN habits h ON hc.habit_id = h.id
+        WHERE hc.user_id = %s
+        ORDER BY hc.completed_at DESC
+        LIMIT 5
+    """
+    tasks = execute_query(task_query, (user_id,)) or []
+    habits = execute_query(habit_query, (user_id,)) or []
+
+    # Merge and sort by time, take top 10
+    events = []
+    for item in tasks:
+        events.append({
+            'type': item['type'],
+            'label': item['label'],
+            'category': item['category'],
+            'occurred_at': item['occurred_at'].isoformat() if item['occurred_at'] else None
+        })
+    for item in habits:
+        events.append({
+            'type': item['type'],
+            'label': item['label'],
+            'category': item['category'],
+            'occurred_at': item['occurred_at'].isoformat() if item['occurred_at'] else None
+        })
+
+    events.sort(key=lambda x: x['occurred_at'] or '', reverse=True)
+    return events[:10]
+
+
 
 @app.get("/api/search")
 async def global_search(q: str = Query("", min_length=0), user_id: int = Depends(get_current_user_id)):

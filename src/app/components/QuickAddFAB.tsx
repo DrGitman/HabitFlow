@@ -8,9 +8,9 @@ export default function QuickAddFAB() {
   const navigate = useNavigate();
 
   const actions = [
-    { icon: <CheckSquare className="w-5 h-5" />, label: 'Add Task', color: '#58a6ff', path: '/tasks?action=new' },
-    { icon: <Activity className="w-5 h-5" />, label: 'Add Habit', color: '#39d353', path: '/habits?action=new' },
-    { icon: <Target className="w-5 h-5" />, label: 'Add Goal', color: '#bc8cff', path: '/dashboard?action=new-goal' },
+    { icon: <CheckSquare className="w-5 h-5" />, label: 'Add Task',  color: '#58a6ff', path: '/actions' },
+    { icon: <Activity    className="w-5 h-5" />, label: 'Add Habit', color: '#39d353', path: '/actions' },
+    { icon: <Target      className="w-5 h-5" />, label: 'Add Goal',  color: '#bc8cff', path: '/actions' },
   ];
 
   return (

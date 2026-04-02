@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../services/api';
-import { Plus, Check, Trash2, Edit2, Flame, Target, Calendar, Tag, CheckCircle2 } from 'lucide-react';
+import { Check, Plus, X, Flame, Droplets, Brain, BookOpen, Dumbbell, Code2 } from 'lucide-react';
 
 interface Habit {
   id: number;
@@ -12,209 +12,341 @@ interface Habit {
   color?: string;
   icon?: string;
   created_at: string;
-  streak?: number; // Assuming streak might be available or handled
+}
+
+interface ProgressData {
+  date: string;
+  count: number;
+}
+
+// ── Week calendar data ────────────────────────────────────────────────────
+const DAYS = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+
+function getWeekDates() {
+  const today = new Date();
+  const dow   = today.getDay(); // 0=Sun
+  const mon = new Date(today);
+  mon.setDate(today.getDate() - ((dow + 6) % 7));
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    return d.getDate();
+  });
+}
+
+// ── Habit icon picker ─────────────────────────────────────────────────────
+const ICON_MAP: { [k: string]: React.ElementType } = {
+  water:     Droplets,
+  hydration: Droplets,
+  meditation:Brain,
+  reading:   BookOpen,
+  training:  Dumbbell,
+  gym:       Dumbbell,
+  code:      Code2,
+  dev:       Code2,
+};
+
+function pickIcon(name: string): React.ElementType {
+  const lower = name.toLowerCase();
+  for (const [key, Icon] of Object.entries(ICON_MAP)) {
+    if (lower.includes(key)) return Icon;
+  }
+  return Flame;
+}
+
+function pickColor(color?: string): string {
+  return color || '#39d353';
+}
+
+// Build 35-cell heatmap (5 weeks × 7 days) from progress data
+function buildHeatmapColors(progress: ProgressData[]): string[] {
+  const LEVELS = ['#1a1a2e', '#0e4429', '#006d32', '#26a641', '#39d353'];
+  // Build lookup by date string
+  const lookup: Record<string, number> = {};
+  for (const p of progress) {
+    lookup[p.date] = p.count;
+  }
+  const today = new Date();
+  const cells: string[] = [];
+  // 35 days back from today
+  for (let i = 34; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const key = d.toISOString().split('T')[0];
+    const count = lookup[key] || 0;
+    const level = count === 0 ? 0 : count === 1 ? 2 : count === 2 ? 3 : 4;
+    cells.push(LEVELS[level]);
+  }
+  return cells;
 }
 
 export default function Habits() {
-  const [habits, setHabits] = useState<Habit[]>([]);
+  const [habits,  setHabits]  = useState<Habit[]>([]);
   const [streaks, setStreaks] = useState<any[]>([]);
+  const [progress, setProgress] = useState<ProgressData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [completedIds, setCompletedIds] = useState<Set<number>>(new Set());
   const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    category: '',
-    frequency: 'daily',
-    target_count: 1,
-    color: '#39d353',
+    name: '', description: '', category: '', frequency: 'daily', target_count: 1, color: '#39d353',
   });
 
-  useEffect(() => {
-    fetchHabits();
-  }, []);
+  const weekDates = getWeekDates();
+  const todayDow  = (new Date().getDay() + 6) % 7; // 0=Mon
+
+  useEffect(() => { fetchHabits(); }, []);
 
   const fetchHabits = async () => {
     try {
       setLoading(true);
-      const [habitsData, streaksData] = await Promise.all([
+      const [h, s, p] = await Promise.all([
         api.getHabits(),
-        api.getAnalyticsStreaks()
+        api.getAnalyticsStreaks(),
+        api.getAnalyticsProgress(),
       ]);
-      setHabits(habitsData as Habit[]);
-      setStreaks(streaksData as any[]);
-    } catch (error) {
-      console.error('Error fetching habits:', error);
-    } finally {
-      setLoading(false);
+      setHabits(h as Habit[]);
+      setStreaks(s as any[]);
+      setProgress(p as ProgressData[]);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  };
+
+  const handleComplete = async (id: number) => {
+    try {
+      await api.completeHabit(id);
+      setCompletedIds(prev => new Set([...prev, id]));
+      fetchHabits();
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (confirm('Delete this habit?')) {
+      try { await api.deleteHabit(id); fetchHabits(); } catch (e) { console.error(e); }
     }
+  };
+
+  const handleEdit = (h: Habit) => {
+    setEditingHabit(h);
+    setFormData({ name: h.name, description: h.description||'', category: h.category||'', frequency: h.frequency, target_count: h.target_count, color: h.color||'#39d353' });
+    setShowForm(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (editingHabit) {
-        await api.updateHabit(editingHabit.id, formData);
-      } else {
-        await api.createHabit(formData);
-      }
-      setFormData({ name: '', description: '', category: '', frequency: 'daily', target_count: 1, color: '#39d353' });
-      setShowForm(false);
-      setEditingHabit(null);
-      fetchHabits();
-    } catch (error) {
-      console.error('Error saving habit:', error);
-    }
+      if (editingHabit) await api.updateHabit(editingHabit.id, formData);
+      else await api.createHabit(formData);
+      setFormData({ name:'', description:'', category:'', frequency:'daily', target_count:1, color:'#39d353' });
+      setShowForm(false); setEditingHabit(null); fetchHabits();
+    } catch (e) { console.error(e); }
   };
 
-  const handleComplete = async (habitId: number) => {
-    try {
-      await api.completeHabit(habitId);
-      // In a real app, we'd update the local state or refetch streaks
-      fetchHabits();
-    } catch (error) {
-      console.error('Error completing habit:', error);
-    }
+  const getStreak = (id: number) => streaks.find((s: any) => s.habit_id === id)?.current_streak || 0;
+
+  const completed = habits.filter(h => completedIds.has(h.id)).length;
+  const total     = habits.length;
+
+  // Format target_count into readable string
+  const fmtTarget = (h: Habit): string => {
+    const units: Record<string, string> = { water: '3L', hydration: '3L', reading: '20 Pages', meditation: '15 Minutes', training: '45 Minutes', gym: '45 Minutes', dev: '1 Hour', code: '1 Hour' };
+    const lower = h.name.toLowerCase();
+    for (const [k, v] of Object.entries(units)) { if (lower.includes(k)) return v; }
+    return `${h.target_count} ${h.target_count === 1 ? 'time' : 'times'}`;
   };
 
-  const handleDelete = async (habitId: number) => {
-    if (confirm('Are you sure you want to delete this habit?')) {
-      try {
-        await api.deleteHabit(habitId);
-        fetchHabits();
-      } catch (error) {
-        console.error('Error deleting habit:', error);
-      }
-    }
-  };
+  // Compute real consistency from last 7 days of progress
+  const last7 = progress.slice(-7);
+  const activeDays = last7.filter(d => d.count > 0).length;
+  const consistencyPct = last7.length > 0 ? Math.round((activeDays / last7.length) * 100) : 0;
 
-  const handleEdit = (habit: Habit) => {
-    setEditingHabit(habit);
-    setFormData({
-      name: habit.name,
-      description: habit.description || '',
-      category: habit.category || '',
-      frequency: habit.frequency,
-      target_count: habit.target_count,
-      color: habit.color || '#39d353',
-    });
-    setShowForm(true);
-  };
+  // Compute change vs previous 7 days
+  const prev7 = progress.slice(-14, -7);
+  const prevActiveDays = prev7.filter(d => d.count > 0).length;
+  const prevPct = prev7.length > 0 ? Math.round((prevActiveDays / prev7.length) * 100) : 0;
+  const pctChange = consistencyPct - prevPct;
 
-  const habitColors = ['#39d353', '#58a6ff', '#f85149', '#d29922', '#bc8cff'];
+  const heatmapColors = buildHeatmapColors(progress);
+
+  const HABIT_COLORS = ['#39d353','#58a6ff','#f85149','#d29922','#bc8cff'];
+
+  // Compute date range for heatmap label
+  const todayLabel = 'TODAY';
+  const startDate = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 34);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
+  })();
 
   return (
-    <div className="p-8 space-y-8 animate-in fade-in duration-700">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-[32px] font-black text-[#e6edf3] tracking-tight">Habits</h2>
-          <p className="text-[#8b949e] text-[14px] mt-1 font-medium">Architechting a more disciplined version of yourself.</p>
-        </div>
-        <button
-          onClick={() => {
-            setShowForm(!showForm);
-            setEditingHabit(null);
-            setFormData({ name: '', description: '', category: '', frequency: 'daily', target_count: 1, color: '#39d353' });
-          }}
-          className="bg-[#2ea043] hover:bg-[#2c974b] text-[#ffffff] font-bold px-6 py-3 rounded-[10px] flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-[#2ea043]/10"
-        >
-          <Plus className="w-5 h-5" />
-          <span>New Habit</span>
-        </button>
+    <div className="p-8 animate-in fade-in duration-700 font-['Inter']">
+
+      {/* ── Week calendar ─────────────────────────────── */}
+      <div className="flex items-center justify-between mb-8">
+        {DAYS.map((day, i) => {
+          const isToday = i === todayDow;
+          return (
+            <div
+              key={day}
+              className={`flex flex-col items-center gap-1 px-3 py-2 rounded-[10px] transition-all ${
+                isToday ? 'bg-[#7c79ff]' : 'bg-transparent'
+              }`}
+            >
+              <span className={`text-[9px] font-black uppercase tracking-widest ${isToday ? 'text-white' : 'text-[#8b949e]'}`}>
+                {day}
+              </span>
+              <span className={`text-[18px] font-black leading-none ${isToday ? 'text-white' : 'text-[#c7c4d7]'}`}>
+                {weekDates[i]}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Habit Form */}
-      {showForm && (
-        <div className="bg-[#161b22] border border-[#30363d] rounded-[12px] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
-          <h3 className="text-[20px] font-bold text-[#e6edf3] mb-6">
-            {editingHabit ? 'Refine Habit' : 'Initialize New Habit'}
-          </h3>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[#8b949e] text-[12px] font-bold uppercase tracking-widest mb-2">Habit Name</label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full bg-[#0d1117] text-[#e6edf3] px-4 py-3 rounded-[8px] border border-[#30363d] focus:border-[#2ea043] focus:outline-none transition-all"
-                    placeholder="e.g. Deep Work, Meditation..."
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-[#8b949e] text-[12px] font-bold uppercase tracking-widest mb-2">Description</label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full bg-[#0d1117] text-[#e6edf3] px-4 py-3 rounded-[8px] border border-[#30363d] focus:border-[#2ea043] focus:outline-none transition-all"
-                    placeholder="Why is this habit important?"
-                    rows={3}
-                  />
+      {/* ── Today's Protocol header ───────────────────── */}
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-[11px] font-black uppercase tracking-widest text-[#8b949e]">
+          Today's Protocol
+        </span>
+        <span className="text-[12px] font-semibold text-[#8b949e]">
+          {completed} of {total} Completed
+        </span>
+      </div>
+
+      {/* ── Protocol list ─────────────────────────────── */}
+      <div className="flex flex-col divide-y divide-[#ffffff06] border border-[#ffffff08] rounded-[14px] overflow-hidden mb-6">
+
+        {habits.map((habit) => {
+          const Icon      = pickIcon(habit.name);
+          const color     = pickColor(habit.color);
+          const streak    = getStreak(habit.id);
+          const isDone    = completedIds.has(habit.id);
+          const target    = fmtTarget(habit);
+
+          return (
+            <div
+              key={habit.id}
+              className="group flex items-center gap-4 px-5 py-4 bg-[#171f33] hover:bg-[#1c2540] transition-all relative"
+            >
+              {/* Colored icon bubble */}
+              <div
+                className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0"
+                style={{ backgroundColor: `${color}20` }}
+              >
+                <Icon className="w-4 h-4" style={{ color }} />
+              </div>
+
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <p className={`text-[14px] font-semibold ${isDone ? 'text-[#8b949e] line-through' : 'text-[#dae2fd]'}`}>
+                  {habit.name}
+                </p>
+                <div className="flex items-center gap-3 mt-0.5">
+                  <span className="text-[11px] text-[#22c55e] font-semibold flex items-center gap-1">
+                    <Flame className="w-3 h-3" />
+                    {streak} days
+                  </span>
+                  <span className="text-[11px] text-[#8b949e]">{target}</span>
                 </div>
               </div>
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[#8b949e] text-[12px] font-bold uppercase tracking-widest mb-2">Frequency</label>
-                    <select
-                      value={formData.frequency}
-                      onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
-                      className="w-full bg-[#0d1117] text-[#e6edf3] px-4 py-3 rounded-[8px] border border-[#30363d] focus:border-[#2ea043] focus:outline-none transition-all"
-                    >
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[#8b949e] text-[12px] font-bold uppercase tracking-widest mb-2">Target/Day</label>
-                    <input
-                      type="number"
-                      value={formData.target_count}
-                      onChange={(e) => setFormData({ ...formData, target_count: parseInt(e.target.value) })}
-                      className="w-full bg-[#0d1117] text-[#e6edf3] px-4 py-3 rounded-[8px] border border-[#30363d] focus:border-[#2ea043] focus:outline-none transition-all"
-                      min="1"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[#8b949e] text-[12px] font-bold uppercase tracking-widest mb-2">Visual Theme</label>
-                  <div className="flex gap-4">
-                    {habitColors.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, color })}
-                        className={`w-10 h-10 rounded-full transition-all flex items-center justify-center ${
-                          formData.color === color ? 'ring-2 ring-[#e6edf3] scale-110' : 'opacity-60 hover:opacity-100'
-                        }`}
-                        style={{ backgroundColor: color }}
-                      >
-                        {formData.color === color && <Check className="w-5 h-5 text-[#0d1117]" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+
+              {/* Edit/Delete actions */}
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity mr-2">
+                <button
+                  onClick={() => handleEdit(habit)}
+                  className="px-2 py-1 text-[11px] text-[#8b949e] hover:text-[#7c79ff] hover:bg-[#222a3d] rounded-[6px] transition-all"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => handleDelete(habit.id)}
+                  className="px-2 py-1 text-[11px] text-[#8b949e] hover:text-[#f85149] hover:bg-[#222a3d] rounded-[6px] transition-all"
+                >
+                  Delete
+                </button>
+              </div>
+
+              {/* Complete button */}
+              {isDone ? (
+                <button className="w-9 h-9 rounded-full border-2 border-[#22c55e] flex items-center justify-center shrink-0">
+                  <Check className="w-4 h-4 text-[#22c55e]" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleComplete(habit.id)}
+                  className="w-9 h-9 rounded-full border border-[#ffffff20] flex items-center justify-center text-[#8b949e] hover:border-[#22c55e] hover:text-[#22c55e] transition-all shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Empty state */}
+        {!loading && habits.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12 bg-[#171f33]">
+            <Flame className="w-10 h-10 text-[#ffffff15] mb-3" />
+            <p className="text-[#8b949e] text-[13px]">No habits yet — start your protocol.</p>
+          </div>
+        )}
+
+        {/* Add new habit row */}
+        {!showForm && (
+          <button
+            onClick={() => { setShowForm(true); setEditingHabit(null); }}
+            className="flex items-center justify-center gap-2 py-4 bg-[#171f33] hover:bg-[#1c2540] text-[#8b949e] hover:text-[#c2c1ff] text-[13px] transition-all w-full border-t border-[#ffffff06]"
+          >
+            <Plus className="w-4 h-4" /> Add Habit
+          </button>
+        )}
+      </div>
+
+      {/* Inline form */}
+      {showForm && (
+        <div className="bg-[#171f33] border border-[#ffffff0a] rounded-[12px] p-5 mb-6 animate-in zoom-in-95 duration-200">
+          <h4 className="text-[15px] font-bold text-[#dae2fd] mb-4">{editingHabit ? 'Edit Habit' : 'New Habit'}</h4>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <input
+              type="text" value={formData.name} placeholder="Habit name..."
+              onChange={e => setFormData({ ...formData, name: e.target.value })}
+              className="w-full bg-[#0d1117] text-[#dae2fd] px-4 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#22c55e] focus:outline-none text-[13px]"
+              required
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <select
+                value={formData.frequency}
+                onChange={e => setFormData({ ...formData, frequency: e.target.value })}
+                className="bg-[#0d1117] text-[#dae2fd] px-3 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#22c55e] focus:outline-none text-[13px]"
+              >
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+              </select>
+              <input
+                type="number" value={formData.target_count} min={1}
+                onChange={e => setFormData({ ...formData, target_count: parseInt(e.target.value) })}
+                className="bg-[#0d1117] text-[#dae2fd] px-3 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#22c55e] focus:outline-none text-[13px]"
+                placeholder="Target/day"
+              />
+            </div>
+            {/* Color picker */}
+            <div className="flex gap-3 items-center">
+              <span className="text-[11px] text-[#8b949e] uppercase tracking-widest font-bold">Color</span>
+              <div className="flex gap-2">
+                {HABIT_COLORS.map(c => (
+                  <button key={c} type="button" onClick={() => setFormData({ ...formData, color: c })}
+                    className={`w-7 h-7 rounded-full transition-all ${formData.color === c ? 'ring-2 ring-white scale-110' : 'opacity-60 hover:opacity-100'}`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
               </div>
             </div>
-            <div className="flex gap-4 pt-4">
-              <button
-                type="submit"
-                className="bg-[#2ea043] hover:bg-[#2c974b] text-[#ffffff] font-bold px-8 py-3 rounded-[10px] transition-all active:scale-95"
-              >
-                {editingHabit ? 'Save Architect' : 'Establish Habit'}
+            <div className="flex gap-3 pt-1">
+              <button type="submit" className="bg-[#22c55e] hover:bg-[#16a34a] text-white font-bold px-6 py-2 rounded-[8px] text-[13px] transition-all active:scale-95">
+                {editingHabit ? 'Save' : 'Create'}
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditingHabit(null);
-                }}
-                className="bg-[#21262d] hover:bg-[#30363d] text-[#e6edf3] font-bold px-8 py-3 rounded-[10px] transition-all"
-              >
+              <button type="button" onClick={() => { setShowForm(false); setEditingHabit(null); }}
+                className="bg-[#222a3d] hover:bg-[#2d3449] text-[#c7c4d7] font-bold px-6 py-2 rounded-[8px] text-[13px] transition-all">
                 Cancel
               </button>
             </div>
@@ -222,83 +354,39 @@ export default function Habits() {
         </div>
       )}
 
-      {/* Habits Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {habits.map((habit) => (
-          <div
-            key={habit.id}
-            className="group bg-[#161b22] border border-[#30363d] rounded-[16px] p-6 relative overflow-hidden transition-all hover:border-[#30363d] hover:shadow-2xl hover:-translate-y-1"
-          >
+      {/* ── Consistency Score heatmap ─────────────────── */}
+      <div className="bg-[#171f33] border border-[#ffffff08] rounded-[14px] p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <p className="text-[13px] font-bold text-[#dae2fd]">Consistency Score</p>
+            <p className="text-[11px] text-[#8b949e] mt-0.5">
+              Visualizing the last 5 weeks of progress
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[20px] font-black text-[#dae2fd]">{consistencyPct}%</p>
+            <p className={`text-[10px] font-black tracking-widest ${pctChange >= 0 ? 'text-[#22c55e]' : 'text-[#f85149]'}`}>
+              {pctChange >= 0 ? '+' : ''}{pctChange}% FROM LAST WEEK
+            </p>
+          </div>
+        </div>
+
+        {/* Grid: 5 rows × 7 cols = 35 days */}
+        <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
+          {heatmapColors.map((color, i) => (
             <div
-              className="absolute top-0 left-0 bottom-0 w-[4px] opacity-60 group-hover:opacity-100 transition-opacity"
-              style={{ backgroundColor: habit.color || '#39d353' }}
+              key={i}
+              className="rounded-[6px] transition-transform hover:scale-110"
+              style={{ backgroundColor: color, aspectRatio: '1' }}
             />
-            
-            <div className="flex items-start justify-between mb-6">
-              <div className="space-y-1">
-                <h3 className="text-[20px] font-black text-[#e6edf3] group-hover:text-[#58a6ff] transition-colors">{habit.name}</h3>
-                {habit.category && (
-                  <span className="text-[11px] font-black uppercase tracking-[0.1em] text-[#8b949e]">{habit.category}</span>
-                )}
-              </div>
-              <div className="flex flex-col items-end gap-2 text-[#8b949e]">
-                <Flame className={`w-5 h-5 ${streaks.find(s => s.habit_id === habit.id)?.current_streak > 0 ? 'text-[#ff7b72] animate-pulse' : 'text-[#30363d]'}`} />
-                <span className="text-[10px] font-bold">STREAK: {streaks.find(s => s.habit_id === habit.id)?.current_streak || 0}</span>
-              </div>
-            </div>
+          ))}
+        </div>
 
-            {habit.description && (
-              <p className="text-[#8b949e] text-[14px] leading-relaxed mb-6 line-clamp-2 italic">"{habit.description}"</p>
-            )}
-
-            <div className="flex items-center gap-4 mb-8">
-              <div className="flex items-center gap-1.5 text-[12px] font-bold text-[#e6edf3] bg-[#21262d] px-3 py-1.5 rounded-full">
-                <Calendar className="w-3.5 h-3.5" />
-                <span className="capitalize">{habit.frequency}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[12px] font-bold text-[#e6edf3] bg-[#21262d] px-3 py-1.5 rounded-full">
-                <Target className="w-3.5 h-3.5" />
-                <span>{habit.target_count}pt</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => handleComplete(habit.id)}
-                className="flex-1 bg-[#238636] hover:bg-[#2ea043] text-[#ffffff] font-bold py-3 rounded-[10px] flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-[#238636]/10"
-              >
-                <CheckCircle2 className="w-5 h-5" />
-                <span>Check-in</span>
-              </button>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleEdit(habit)}
-                  className="p-3 bg-[#21262d] hover:bg-[#30363d] text-[#8b949e] hover:text-[#58a6ff] rounded-[10px] transition-all"
-                  title="Edit Habit"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(habit.id)}
-                  className="p-3 bg-[#21262d] hover:bg-[#30363d] text-[#8b949e] hover:text-[#f85149] rounded-[10px] transition-all"
-                  title="Delete Habit"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {!loading && habits.length === 0 && (
-          <div className="col-span-full py-20 bg-[#161b22]/50 rounded-[16px] border border-dashed border-[#30363d] flex flex-col items-center justify-center text-center">
-            <div className="w-16 h-16 bg-[#21262d] rounded-full flex items-center justify-center mb-4">
-              <Plus className="w-8 h-8 text-[#8b949e]" />
-            </div>
-            <h4 className="text-[18px] font-bold text-[#e6edf3] mb-2">No Habits Defined</h4>
-            <p className="text-[#8b949e] max-w-[300px]">The architect starts with a single blueprint. Create your first habit above.</p>
-          </div>
-        )}
+        {/* Date labels */}
+        <div className="flex justify-between mt-3">
+          <span className="text-[10px] text-[#8b949e]">{startDate}</span>
+          <span className="text-[10px] text-[#8b949e]">{todayLabel}</span>
+        </div>
       </div>
     </div>
   );
