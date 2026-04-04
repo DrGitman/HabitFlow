@@ -13,6 +13,7 @@ from models.habit import Habit
 from models.task import Task
 from models.goal import Goal
 from models.scheduled_item import ScheduledItem
+from models.focus_session import FocusSession
 from db.connection import execute_query
 
 load_dotenv()
@@ -67,13 +68,18 @@ class TaskCreate(BaseModel):
 class GoalCreate(BaseModel):
     title: str
     description: Optional[str] = None
-    target_value: float = 100
-    current_value: float = 0
-    unit: Optional[str] = None
+    priority: str = 'medium'  # low, medium, high
     deadline: Optional[str] = None
 
 class ProgressUpdate(BaseModel):
     increment: float = 1
+
+class FocusSessionStart(BaseModel):
+    task_id: int
+    duration_minutes: int = 25
+
+class FocusSessionComplete(BaseModel):
+    task_completed: bool = False
 
 # --- Security & Auth ---
 
@@ -247,6 +253,66 @@ async def delete_goal(goal_id: int, user_id: int = Depends(get_current_user_id))
     Goal.delete(goal_id, user_id)
     return {'message': 'Goal deleted'}
 
+# --- Goal Linking ---
+
+@app.post("/api/goals/{goal_id}/link-habit")
+async def link_habit_to_goal(goal_id: int, data: dict, user_id: int = Depends(get_current_user_id)):
+    """Link a habit to a goal"""
+    # Verify goal exists
+    goal = Goal.get_by_id(goal_id, user_id)
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    
+    habit_id = data.get('habit_id')
+    if not habit_id:
+        raise HTTPException(status_code=400, detail="habit_id is required")
+    
+    # Verify habit exists
+    habit = Habit.get_by_id(habit_id, user_id)
+    if not habit:
+        raise HTTPException(status_code=404, detail="Habit not found")
+    
+    Goal.link_habit_to_goal(goal_id, habit_id)
+    return {'message': 'Habit linked to goal', 'goal_id': goal_id, 'habit_id': habit_id}
+
+@app.delete("/api/goals/{goal_id}/unlink-habit/{habit_id}")
+async def unlink_habit_from_goal(goal_id: int, habit_id: int, user_id: int = Depends(get_current_user_id)):
+    """Unlink a habit from a goal"""
+    goal = Goal.get_by_id(goal_id, user_id)
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    
+    Goal.unlink_habit_from_goal(goal_id, habit_id)
+    return {'message': 'Habit unlinked from goal', 'goal_id': goal_id, 'habit_id': habit_id}
+
+@app.post("/api/goals/{goal_id}/link-habits")
+async def link_habits_to_goal(goal_id: int, data: dict, user_id: int = Depends(get_current_user_id)):
+    """Update linked habits for a goal (multi-select)"""
+    goal = Goal.get_by_id(goal_id, user_id)
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    
+    habit_ids = data.get('habit_ids', [])
+    
+    # Verify all habits exist
+    for habit_id in habit_ids:
+        habit = Habit.get_by_id(habit_id, user_id)
+        if not habit:
+            raise HTTPException(status_code=404, detail=f"Habit {habit_id} not found")
+    
+    Goal.update_goal_habits(goal_id, habit_ids)
+    return {'message': 'Goal habits updated', 'goal_id': goal_id, 'habit_ids': habit_ids}
+
+@app.get("/api/goals/{goal_id}/linked-habits")
+async def get_linked_habits(goal_id: int, user_id: int = Depends(get_current_user_id)):
+    """Get all habits linked to a goal"""
+    goal = Goal.get_by_id(goal_id, user_id)
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    
+    habit_ids = Goal.get_goal_habits(goal_id)
+    return {'goal_id': goal_id, 'habit_ids': habit_ids}
+
 # --- Analytics ---
 
 @app.get("/api/analytics/summary")
@@ -254,7 +320,7 @@ async def get_analytics_summary(user_id: int = Depends(get_current_user_id)):
     total_habits = len(Habit.get_all(user_id))
     total_tasks = len(Task.get_all(user_id))
     completed_tasks = len(Task.get_all(user_id, is_completed=True))
-    total_goals = len(Goal.get_all(user_id, is_completed=False))
+    total_goals = len(Goal.get_all(user_id))
     completed_goals = len(Goal.get_all(user_id, is_completed=True))
 
     today = datetime.now().date()
@@ -1044,6 +1110,76 @@ async def clear_drafts(user_id: int = Depends(get_current_user_id)):
     """Clear all unconfirmed draft scheduled items"""
     ScheduledItem.delete_drafts(user_id)
     return {'message': 'Drafts cleared'}
+
+# --- Focus Sessions (Task-linked Timer) ---
+
+@app.post("/api/focus-sessions/start")
+async def start_focus_session(
+    data: FocusSessionStart,
+    user_id: int = Depends(get_current_user_id)
+):
+    """Start a new focus session for a task"""
+    # Verify task exists and belongs to user
+    task = Task.get_by_id(data.task_id, user_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    session = FocusSession.create(user_id, data.task_id, data.duration_minutes)
+    return session
+
+@app.get("/api/focus-sessions/{session_id}")
+async def get_focus_session(session_id: int, user_id: int = Depends(get_current_user_id)):
+    """Get a focus session by ID"""
+    session = FocusSession.get_by_id(session_id, user_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Focus session not found")
+    return session
+
+@app.post("/api/focus-sessions/{session_id}/complete")
+async def complete_focus_session(
+    session_id: int,
+    data: FocusSessionComplete,
+    user_id: int = Depends(get_current_user_id)
+):
+    """Complete a focus session"""
+    session = FocusSession.get_by_id(session_id, user_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Focus session not found")
+    
+    # If user marked task as completed, update the task
+    if data.task_completed:
+        task = Task.get_by_id(session.get('task_id'), user_id)
+        if task:
+            Task.update(session.get('task_id'), user_id, is_completed=True, completed_at=datetime.utcnow())
+    
+    completed_session = FocusSession.complete_session(session_id, user_id, data.task_completed)
+    return completed_session
+
+@app.get("/api/focus-sessions")
+async def get_user_focus_sessions(
+    task_id: Optional[int] = Query(None),
+    user_id: int = Depends(get_current_user_id)
+):
+    """Get all focus sessions for user, optionally filtered by task"""
+    sessions = FocusSession.get_all(user_id, task_id)
+    return sessions
+
+@app.get("/api/focus-sessions/task/{task_id}")
+async def get_task_focus_sessions(task_id: int, user_id: int = Depends(get_current_user_id)):
+    """Get all focus sessions for a specific task"""
+    # Verify task exists
+    task = Task.get_by_id(task_id, user_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    sessions = FocusSession.get_task_sessions(user_id, task_id)
+    return sessions
+
+@app.get("/api/focus-sessions/today")
+async def get_today_sessions(user_id: int = Depends(get_current_user_id)):
+    """Get all focus sessions created today"""
+    sessions = FocusSession.get_today_sessions(user_id)
+    return sessions
 
 if __name__ == "__main__":
     import uvicorn

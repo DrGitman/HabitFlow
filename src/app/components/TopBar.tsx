@@ -66,7 +66,7 @@ export default function TopBar() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search collective signal..."
+            placeholder="Search for tasks, habits, goals..."
             className="w-full bg-[#11141d] border border-[#ffffff0a] rounded-[12px] py-2.5 pl-10 pr-10 text-[#e6edf3] text-[13px] focus:outline-none focus:border-[#7c79ff] focus:ring-1 focus:ring-[#7c79ff]/20 transition-all font-medium placeholder:opacity-50"
           />
           {searchQuery && (

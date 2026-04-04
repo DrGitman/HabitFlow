@@ -4,14 +4,14 @@ from datetime import datetime, timedelta
 
 class Goal:
     @staticmethod
-    def create(user_id, title, description=None, target_value=100, current_value=0, unit=None, deadline=None):
+    def create(user_id, title, description=None, priority='medium', deadline=None):
         """Create a new goal"""
         query = """
-            INSERT INTO goals (user_id, title, description, target_value, current_value, unit, deadline)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO goals (user_id, title, description, priority, deadline)
+            VALUES (%s, %s, %s, %s, %s)
             RETURNING *
         """
-        return execute_query(query, (user_id, title, description, target_value, current_value, unit, deadline), fetch_one=True)
+        return execute_query(query, (user_id, title, description, priority, deadline), fetch_one=True)
 
     @staticmethod
     def get_all(user_id, is_completed=None):
@@ -167,3 +167,48 @@ class Goal:
             'average_goal_progress': avg_goal_progress,
             'goals_data': goals_data
         }
+    # --- Goal-Habit Linking ---
+    @staticmethod
+    def link_habit_to_goal(goal_id, habit_id):
+        """Link a habit to a goal (many-to-many)"""
+        query = """
+            INSERT INTO goal_habits (goal_id, habit_id)
+            VALUES (%s, %s)
+            ON CONFLICT (goal_id, habit_id) DO NOTHING
+            RETURNING *
+        """
+        return execute_query(query, (goal_id, habit_id), fetch_one=True)
+
+    @staticmethod
+    def unlink_habit_from_goal(goal_id, habit_id):
+        """Unlink a habit from a goal"""
+        query = "DELETE FROM goal_habits WHERE goal_id = %s AND habit_id = %s"
+        return execute_query(query, (goal_id, habit_id), fetch_all=False)
+
+    @staticmethod
+    def get_goal_habits(goal_id):
+        """Get all habits linked to a goal"""
+        query = "SELECT habit_id FROM goal_habits WHERE goal_id = %s"
+        result = execute_query(query, (goal_id,))
+        return [r['habit_id'] for r in result] if result else []
+
+    @staticmethod
+    def update_goal_habits(goal_id, habit_ids):
+        """Update all habits for a goal (replace existing)"""
+        # Delete existing links
+        query1 = "DELETE FROM goal_habits WHERE goal_id = %s"
+        execute_query(query1, (goal_id,), fetch_all=False)
+        
+        # Add new links
+        if habit_ids:
+            query2 = "INSERT INTO goal_habits (goal_id, habit_id) VALUES "
+            values = []
+            params = []
+            for habit_id in habit_ids:
+                values.append("(%s, %s)")
+                params.append(goal_id)
+                params.append(habit_id)
+            query2 += ", ".join(values)
+            execute_query(query2, tuple(params), fetch_all=False)
+        
+        return True

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { api } from '../services/api';
 import {
-  Check, Plus, Clock, CheckCircle2, Trash2, Edit2, Tag, Calendar as CalendarIcon,
+  Check, Plus, Clock, CheckCircle2, Trash2, Edit2, Tag, Calendar as CalendarIcon, Link2, X,
 } from 'lucide-react';
 
 interface Task {
@@ -11,27 +11,84 @@ interface Task {
   category?: string;
   priority: 'low' | 'medium' | 'high';
   due_date?: string;
+  goal_id?: number | null;
   is_completed: boolean;
   created_at: string;
 }
 
+interface HabitCompletion {
+  completion_date: string;
+  count: number;
+}
+
 // ── Priority badge meta matching reference image ──────────────────────────
 const PRIORITY_META = {
-  high:   { label: 'HIGH PRIORITY', bg: '#1e3a5f', text: '#60a5fa' },
-  medium: { label: 'WORK',          bg: '#1a2a1a', text: '#4ade80' },
-  low:    { label: 'PERSONAL',      bg: '#2d1a3d', text: '#c084fc' },
+  high:   { label: 'High', bg: '#1e3a5f', text: '#60a5fa' },
+  medium: { label: 'Medium', bg: '#2d2a1a', text: '#f59e0b' },
+  low:    { label: 'Low', bg: '#2d1a3d', text: '#c084fc' },
 };
 
-// Pomodoro timer display
-function FocusMode() {
+const CATEGORY_OPTIONS = ['School', 'Personal', 'Work'];
+const PRIORITY_OPTIONS = ['low', 'medium', 'high'] as const;
+type Filter = 'all' | 'work' | 'personal' | 'school';
+
+// Pomodoro timer display - now task-linked
+function FocusMode({ onSessionStart }: { onSessionStart: (taskId: number) => void }) {
   const [seconds, setSeconds] = useState(25 * 60);
   const [running, setRunning] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [incompleteTasks, setIncompleteTasks] = useState<Task[]>([]);
+
+  useEffect(() => {
+    fetchTasks();
+  }, []);
 
   useEffect(() => {
     if (!running) return;
     const id = setInterval(() => setSeconds(s => Math.max(0, s - 1)), 1000);
     return () => clearInterval(id);
   }, [running]);
+
+  const fetchTasks = async () => {
+    try {
+      const data = await api.getTasks();
+      setTasks(data as Task[]);
+      setIncompleteTasks((data as Task[]).filter(t => !t.is_completed));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleStartSession = async () => {
+    if (!selectedTaskId) {
+      alert('Please select a task first');
+      return;
+    }
+    setRunning(true);
+    onSessionStart(selectedTaskId);
+  };
+
+  const handleTimerEnd = async () => {
+    if (running && seconds === 0) {
+      setRunning(false);
+      const response = confirm('Did you complete this task?');
+      if (response) {
+        try {
+          await api.completeTask(selectedTaskId!, true);
+          fetchTasks();
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      setSeconds(25 * 60);
+      setSelectedTaskId(null);
+    }
+  };
+
+  useEffect(() => {
+    handleTimerEnd();
+  }, [seconds, running]);
 
   const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
   const ss = String(seconds % 60).padStart(2, '0');
@@ -55,32 +112,64 @@ function FocusMode() {
           {running ? 'POMODORO ACTIVE' : 'READY'}
         </span>
       </div>
-      <div className="px-5 pb-5">
-        <button
-          onClick={() => setRunning(r => !r)}
-          className="w-full bg-[#222a3d] hover:bg-[#2d3449] text-[#c7c4d7] text-[13px] font-bold py-2.5 rounded-[8px] transition-all"
+      {/* Task selector dropdown */}
+      <div className="px-5">
+        <label className="text-[10px] font-black uppercase tracking-widest text-[#8b949e] block mb-2">
+          SELECT TASK
+        </label>
+        <select
+          value={selectedTaskId || ''}
+          onChange={(e) => setSelectedTaskId(e.target.value ? parseInt(e.target.value) : null)}
+          className="w-full appearance-none bg-[#0d1117] text-[#c7c4d7] px-3 py-2.5 rounded-[8px] border border-[#30363d] focus:border-[#7c79ff] focus:outline-none text-[12px] cursor-pointer pr-8 bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2712%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%238b949e%22%20d%3D%22M2%204l4%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_10px_center]"
         >
-          {running ? 'Pause Session' : 'Start Session'}
+          <option value="">Choose a task...</option>
+          {incompleteTasks.map(t => (
+            <option key={t.id} value={t.id}>{t.title}</option>
+          ))}
+        </select>
+      </div>
+      <div className="px-5 pb-5 pt-4">
+        <button
+          onClick={handleStartSession}
+          disabled={!selectedTaskId}
+          className="w-full bg-[#222a3d] hover:bg-[#2d3449] disabled:opacity-50 disabled:cursor-not-allowed text-[#c7c4d7] text-[13px] font-bold py-2.5 rounded-[8px] transition-all"
+        >
+          {running ? 'Session Active...' : 'Start Session'}
         </button>
       </div>
     </div>
   );
 }
 
-// Mini heatmap (7×2 grid)
-function MiniHeatmap() {
+// Mini heatmap - now dynamic from database
+function MiniHeatmap({ completions }: { completions: HabitCompletion[] }) {
+  // Create a map of completion dates
+  const completionMap = new Map(
+    completions.map(c => [c.completion_date, c.count])
+  );
+
+  // Get last 14 days
   const cells = Array.from({ length: 14 }, (_, i) => {
-    const v = Math.random();
-    if (v < 0.1) return '#6b2737'; // missed
-    if (v < 0.25) return '#1f3a2a';
-    if (v < 0.5)  return '#27ae60';
+    const date = new Date();
+    date.setDate(date.getDate() - (13 - i));
+    const dateStr = date.toISOString().split('T')[0];
+    const count = completionMap.get(dateStr) || 0;
+    
+    if (count === 0) return '#6b2737';
+    if (count === 1) return '#1f3a2a';
+    if (count === 2) return '#27ae60';
     return '#2ecc71';
   });
+
+  const totalDays = 14;
+  const completedDays = Array.from(completionMap.values()).filter(c => c > 0).length;
+  const consistency = Math.round((completedDays / totalDays) * 100);
+
   return (
     <div className="bg-[#171f33] border border-[#ffffff08] rounded-[14px] p-5">
       <div className="flex items-center justify-between mb-3">
         <p className="text-[10px] font-black uppercase tracking-widest text-[#8b949e]">Consistency</p>
-        <span className="text-[13px] font-black text-[#22c55e]">84%</span>
+        <span className="text-[13px] font-black text-[#22c55e]">{consistency}%</span>
       </div>
       <div className="grid grid-cols-7 gap-1">
         {cells.map((color, i) => (
@@ -139,22 +228,231 @@ function UpcomingTasks({ tasks }: { tasks: Task[] }) {
   );
 }
 
-type Filter = 'all' | 'work' | 'personal';
-
 interface TasksProps {
   forceNew?: boolean;
   onFormOpened?: () => void;
 }
 
+// Goal Link Dropdown Component
+function GoalLinkDropdown({
+  isOpen,
+  taskId,
+  currentGoalId,
+  goals,
+  onSelect,
+  onClose,
+  buttonRef,
+}: {
+  isOpen: boolean;
+  taskId: number | null;
+  currentGoalId?: number | null;
+  goals: Array<{ id: number; title: string }>;
+  onSelect: (goalId: number | null) => void;
+  onClose: () => void;
+  buttonRef: React.RefObject<HTMLButtonElement>;
+}) {
+  const [search, setSearch] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredGoals = search.trim() 
+    ? goals.filter(goal => goal.title.toLowerCase().includes(search.toLowerCase()))
+    : [];
+
+  // Recently linked goals (first 3)
+  const recentGoals = goals.slice(0, 3);
+  
+  // Popular goals (most linked) - for now same as recent
+  const popularGoals = goals.slice(0, 3);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || taskId === null) return null;
+
+  const displaySearch = search.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+      <div
+        ref={dropdownRef}
+        className="bg-[#171f33] border border-[#ffffff10] rounded-[16px] w-full max-w-[480px] shadow-2xl animate-in zoom-in-95 duration-200 max-h-[80vh] overflow-hidden flex flex-col"
+      >
+        {/* Search bar section */}
+        <div className="p-4 border-b border-[#ffffff08] flex-shrink-0">
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                placeholder="Search goals..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-[#222a3d] border border-[#ffffff08] rounded-[8px] text-[#dae2fd] placeholder-[#8b949e] text-[13px] px-4 py-2.5 focus:outline-none focus:border-[#7c79ff] focus:ring-1 focus:ring-[#7c79ff]/30"
+                autoFocus
+              />
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2.5 hover:bg-[#222a3d] rounded-[8px] text-[#8b949e] hover:text-[#c7c4d7] transition-all"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content area */}
+        <div className="overflow-y-auto flex-1">
+          {displaySearch ? (
+            <div className="p-4">
+              {filteredGoals.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-[13px] text-[#8b949e]">No goals found</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredGoals.map(goal => (
+                    <button
+                      key={goal.id}
+                      onClick={() => {
+                        onSelect(goal.id);
+                        onClose();
+                      }}
+                      className={`w-full text-left px-4 py-3 rounded-[8px] border transition-all hover:bg-[#222a3d] ${
+                        currentGoalId === goal.id
+                          ? 'bg-[#7c79ff]/20 border-[#7c79ff]'
+                          : 'bg-[#222a3d] border-[#ffffff08] hover:border-[#ffffff15]'
+                      }`}
+                    >
+                      <p className="text-[13px] font-semibold text-[#c7c4d7]">{goal.title}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-4 space-y-6">
+              {/* None option */}
+              <div>
+                <button
+                  onClick={() => {
+                    onSelect(null);
+                    onClose();
+                  }}
+                  className={`w-full text-left px-4 py-3 rounded-[8px] border transition-all ${
+                    currentGoalId === null
+                      ? 'bg-[#7c79ff]/20 border-[#7c79ff]'
+                      : 'bg-[#222a3d] border-[#ffffff08] hover:border-[#ffffff15] hover:bg-[#222a3d]'
+                  }`}
+                >
+                  <p className="text-[13px] font-semibold text-[#c7c4d7]">None (Unlink)</p>
+                </button>
+              </div>
+
+              {/* Recently Linked */}
+              {recentGoals.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-bold text-[#8b949e] uppercase tracking-widest mb-3 px-2">Recently Linked</p>
+                  <div className="space-y-2">
+                    {recentGoals.map(goal => (
+                      <button
+                        key={goal.id}
+                        onClick={() => {
+                          onSelect(goal.id);
+                          onClose();
+                        }}
+                        className={`w-full text-left px-4 py-3 rounded-[8px] border transition-all ${
+                          currentGoalId === goal.id
+                            ? 'bg-[#7c79ff]/20 border-[#7c79ff]'
+                            : 'bg-[#222a3d] border-[#ffffff08] hover:border-[#ffffff15] hover:bg-[#222a3d]'
+                        }`}
+                      >
+                        <p className="text-[13px] font-semibold text-[#c7c4d7]">{goal.title}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Popular Goals */}
+              {popularGoals.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-bold text-[#8b949e] uppercase tracking-widest mb-3 px-2">Popular Goals</p>
+                  <div className="space-y-2">
+                    {popularGoals.map(goal => (
+                      <button
+                        key={goal.id}
+                        onClick={() => {
+                          onSelect(goal.id);
+                          onClose();
+                        }}
+                        className={`w-full text-left px-4 py-3 rounded-[8px] border transition-all ${
+                          currentGoalId === goal.id
+                            ? 'bg-[#7c79ff]/20 border-[#7c79ff]'
+                            : 'bg-[#222a3d] border-[#ffffff08] hover:border-[#ffffff15] hover:bg-[#222a3d]'
+                        }`}
+                      >
+                        <p className="text-[13px] font-semibold text-[#c7c4d7]">{goal.title}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
   const [tasks,       setTasks]       = useState<Task[]>([]);
+  const [completions, setCompletions] = useState<HabitCompletion[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [filter,      setFilter]      = useState<Filter>('all');
   const [showForm,    setShowForm]    = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [goals, setGoals] = useState<Array<{ id: number; title: string }>>([]);
+  const [linkDropdownOpen, setLinkDropdownOpen] = useState(false);
+  const [linkingTaskId, setLinkingTaskId] = useState<number | null>(null);
+  const [currentTaskGoalId, setCurrentTaskGoalId] = useState<number | null>(null);
+  const linkButtonRef = useRef<HTMLButtonElement>(null);
   const [formData,    setFormData]    = useState({
-    title: '', description: '', category: '', priority: 'medium' as Task['priority'], due_date: '',
+    title: '', description: '', category: 'Personal', priority: 'medium' as Task['priority'], due_date: '',
   });
+
+  const fetchTasks = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getTasks();
+      setTasks(data as Task[]);
+      // Fetch consistency data from a mock source (in real app, would fetch from backend)
+      // For now, we'll simulate based on tasks created
+      const completionData = (data as Task[])
+        .filter(t => t.is_completed && t.created_at)
+        .map(t => ({
+          completion_date: new Date(t.created_at).toISOString().split('T')[0],
+          count: 1,
+        }));
+      setCompletions(completionData);
+
+      // Fetch goals for linking
+      try {
+        const goalsData = await api.getGoals();
+        const formattedGoals = (goalsData as any[]).map(g => ({ id: g.id, title: g.title }));
+        setGoals(formattedGoals);
+      } catch (e) {
+        console.error('Error fetching goals:', e);
+      }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  };
 
   useEffect(() => { fetchTasks(); }, []);
 
@@ -163,19 +461,10 @@ export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
     if (forceNew) {
       setShowForm(true);
       setEditingTask(null);
-      setFormData({ title: '', description: '', category: '', priority: 'medium', due_date: '' });
+      setFormData({ title: '', description: '', category: 'Personal', priority: 'medium', due_date: '' });
       onFormOpened?.();
     }
   }, [forceNew]);
-
-  const fetchTasks = async () => {
-    try {
-      setLoading(true);
-      const data = await api.getTasks();
-      setTasks(data as Task[]);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  };
 
   const handleComplete = async (id: number, done: boolean) => {
     try { await api.completeTask(id, !done); fetchTasks(); } catch (e) { console.error(e); }
@@ -185,7 +474,7 @@ export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
   };
   const handleEdit = (t: Task) => {
     setEditingTask(t);
-    setFormData({ title: t.title, description: t.description || '', category: t.category || '', priority: t.priority, due_date: t.due_date || '' });
+    setFormData({ title: t.title, description: t.description || '', category: t.category || 'Personal', priority: t.priority, due_date: t.due_date || '' });
     setShowForm(true);
   };
   const handleSubmit = async (e: React.FormEvent) => {
@@ -193,15 +482,30 @@ export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
     try {
       if (editingTask) await api.updateTask(editingTask.id, formData);
       else await api.createTask(formData);
-      setFormData({ title: '', description: '', category: '', priority: 'medium', due_date: '' });
+      setFormData({ title: '', description: '', category: 'Personal', priority: 'medium', due_date: '' });
       setShowForm(false); setEditingTask(null); fetchTasks();
     } catch (e) { console.error(e); }
   };
 
-  // Map priority → filter bucket
+  const handleLinkGoal = async (goalId: number | null) => {
+    if (linkingTaskId === null) return;
+    try {
+      await api.updateTask(linkingTaskId, { goal_id: goalId });
+      fetchTasks();
+      setLinkDropdownOpen(false);
+      setLinkingTaskId(null);
+      setCurrentTaskGoalId(null);
+    } catch (e) {
+      console.error('Error linking goal:', e);
+    }
+  };
+
+  // Map category → filter bucket
   const filterBucket = (t: Task): Filter => {
-    if (t.priority === 'high') return 'work';
-    if (t.priority === 'low') return 'personal';
+    const cat = (t.category || '').toLowerCase();
+    if (cat === 'work') return 'work';
+    if (cat === 'school') return 'school';
+    if (cat === 'personal') return 'personal';
     return 'all';
   };
 
@@ -216,6 +520,10 @@ export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
     catch { return null; }
   };
 
+  const handleSessionStart = (taskId: number) => {
+    console.log('Session started for task:', taskId);
+  };
+
   return (
     <div className="p-8 animate-in fade-in duration-700 font-['Inter']">
       {/* ── Header ─────────────────────────────────── */}
@@ -228,7 +536,7 @@ export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
         </div>
         {/* Filter tabs */}
         <div className="flex bg-[#171f33] border border-[#ffffff08] rounded-[10px] p-1 gap-1">
-          {(['all', 'work', 'personal'] as Filter[]).map(f => (
+          {(['all', 'work', 'personal', 'school'] as Filter[]).map(f => (
             <button
               key={f}
               onClick={() => setFilter(f)}
@@ -287,6 +595,18 @@ export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
 
                 {/* Actions */}
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    ref={linkingTaskId === task.id ? linkButtonRef : null}
+                    onClick={() => {
+                      setLinkingTaskId(task.id);
+                      setCurrentTaskGoalId(task.goal_id || null);
+                      setLinkDropdownOpen(true);
+                    }}
+                    className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#7c79ff] transition-all"
+                    title="Link to goal"
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                  </button>
                   <button onClick={() => handleEdit(task)} className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#7c79ff] transition-all">
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
@@ -349,33 +669,91 @@ export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
                   className="w-full bg-[#0d1117] text-[#dae2fd] px-4 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none text-[13px] transition-all"
                   required
                 />
+                {/* Priority, Category, Date in a grid */}
                 <div className="grid grid-cols-3 gap-3">
-                  <select
-                    value={formData.priority}
-                    onChange={e => setFormData({ ...formData, priority: e.target.value as Task['priority'] })}
-                    className="appearance-none bg-[#0d1117] text-[#c7c4d7] px-3 py-2.5 rounded-[8px] border border-[#30363d] focus:border-[#7c79ff] focus:outline-none text-[13px] cursor-pointer pr-8 bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%238b949e%22%20d%3D%22M2%204l4%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_10px_center]"
-                  >
-                    <option value="high">High Priority</option>
-                    <option value="medium">Work</option>
-                    <option value="low">Personal</option>
-                  </select>
-                  <input
-                    type="text" value={formData.category} placeholder="Category"
-                    onChange={e => setFormData({ ...formData, category: e.target.value })}
-                    className="col-span-1 bg-[#0d1117] text-[#dae2fd] px-3 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none text-[13px]"
-                  />
-                  <input
-                    type="date" value={formData.due_date}
-                    onChange={e => setFormData({ ...formData, due_date: e.target.value })}
-                    className="col-span-1 bg-[#0d1117] text-[#dae2fd] px-3 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none text-[13px]"
-                  />
+                  {/* Priority Dropdown */}
+                  <div className="relative">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-[#8b949e] block mb-1">Priority</label>
+                    <select
+                      value={formData.priority}
+                      onChange={e => setFormData({ ...formData, priority: e.target.value as Task['priority'] })}
+                      className="w-full appearance-none bg-[#0d1117] text-[#c7c4d7] px-3 py-2.5 rounded-[8px] border border-[#30363d] hover:border-[#7c79ff] focus:border-[#7c79ff] focus:outline-none text-[12px] cursor-pointer transition-all pr-8"
+                      style={{
+                        backgroundImage: `url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2712%27%20height%3D%2712%27%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%238b949e%22%20d%3D%22M2%204l4%204%204-4%22%2F%3E%3C%2Fsvg%3E')`,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 10px center',
+                        backgroundSize: '12px',
+                      }}
+                    >
+                      <option value="high">High</option>
+                      <option value="medium">Medium</option>
+                      <option value="low">Low</option>
+                    </select>
+                  </div>
+
+                  {/* Category Dropdown */}
+                  <div className="relative">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-[#8b949e] block mb-1">Category</label>
+                    <select
+                      value={formData.category}
+                      onChange={e => setFormData({ ...formData, category: e.target.value })}
+                      className="w-full appearance-none bg-[#0d1117] text-[#c7c4d7] px-3 py-2.5 rounded-[8px] border border-[#30363d] hover:border-[#7c79ff] focus:border-[#7c79ff] focus:outline-none text-[12px] cursor-pointer transition-all pr-8"
+                      style={{
+                        backgroundImage: `url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2712%27%20height%3D%2712%27%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%238b949e%22%20d%3D%22M2%204l4%204%204-4%22%2F%3E%3C%2Fsvg%3E')`,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 10px center',
+                        backgroundSize: '12px',
+                      }}
+                    >
+                      {CATEGORY_OPTIONS.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Date Picker */}
+                  <div className="relative">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-[#8b949e] block mb-1">Due Date</label>
+                    <input
+                      type="date" value={formData.due_date}
+                      onChange={e => setFormData({ ...formData, due_date: e.target.value })}
+                      className="w-full bg-[#0d1117] text-[#dae2fd] px-3 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none text-[12px] transition-all"
+                      style={{
+                        colorScheme: 'dark',
+                      }}
+                    />
+                    <style>{`
+                      input[type="date"]::-webkit-calendar-picker-indicator {
+                        filter: brightness(0) invert(1) brightness(1.2);
+                        cursor: pointer;
+                        opacity: 0.9;
+                      }
+                      input[type="date"]::-webkit-calendar-picker-indicator:hover {
+                        filter: brightness(0) invert(1) brightness(1.5);
+                        opacity: 1;
+                      }
+                      input[type="date"] {
+                        accent-color: #7c79ff;
+                      }
+                    `}</style>
+                  </div>
                 </div>
-                <div className="flex gap-3 pt-1">
-                  <button type="submit" className="bg-[#7c79ff] hover:bg-[#6d69f0] text-white font-bold px-6 py-2 rounded-[8px] text-[13px] transition-all active:scale-95">
-                    {editingTask ? 'Save' : 'Create'}
+
+                {/* Description */}
+                <textarea
+                  value={formData.description}
+                  placeholder="Add description (optional)..."
+                  onChange={e => setFormData({ ...formData, description: e.target.value })}
+                  className="w-full bg-[#0d1117] text-[#dae2fd] px-4 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none text-[13px] transition-all resize-none h-20"
+                />
+
+                {/* Buttons */}
+                <div className="flex gap-3 pt-2">
+                  <button type="submit" className="bg-[#7c79ff] hover:bg-[#6d69f0] text-white font-bold px-6 py-2.5 rounded-[8px] text-[13px] transition-all active:scale-95">
+                    {editingTask ? 'Save Changes' : 'Create Task'}
                   </button>
                   <button type="button" onClick={() => { setShowForm(false); setEditingTask(null); }}
-                    className="bg-[#222a3d] hover:bg-[#2d3449] text-[#c7c4d7] font-bold px-6 py-2 rounded-[8px] text-[13px] transition-all">
+                    className="bg-[#222a3d] hover:bg-[#2d3449] text-[#c7c4d7] font-bold px-6 py-2.5 rounded-[8px] text-[13px] transition-all">
                     Cancel
                   </button>
                 </div>
@@ -387,15 +765,29 @@ export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
         {/* RIGHT — sidebar */}
         <div className="flex flex-col gap-4">
           {/* Focus Mode / Pomodoro */}
-          <FocusMode />
+          <FocusMode onSessionStart={handleSessionStart} />
 
           {/* Upcoming */}
           <UpcomingTasks tasks={tasks} />
 
-          {/* Mini consistency heatmap */}
-          <MiniHeatmap />
         </div>
       </div>
+
+      {/* Goal Link Dropdown */}
+      <GoalLinkDropdown
+        isOpen={linkDropdownOpen}
+        taskId={linkingTaskId}
+        currentGoalId={currentTaskGoalId}
+        goals={goals}
+        onSelect={handleLinkGoal}
+        onClose={() => {
+          setLinkDropdownOpen(false);
+          setLinkingTaskId(null);
+          setCurrentTaskGoalId(null);
+        }}
+        buttonRef={linkButtonRef}
+      />
     </div>
   );
 }
+

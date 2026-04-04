@@ -53,9 +53,7 @@ CREATE TABLE IF NOT EXISTS goals (
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     description TEXT,
-    target_value INTEGER NOT NULL,
-    current_value INTEGER DEFAULT 0,
-    unit VARCHAR(50),
+    priority VARCHAR(20) DEFAULT 'medium', -- low, medium, high
     deadline DATE,
     is_completed BOOLEAN DEFAULT false,
     completed_at TIMESTAMP,
@@ -162,3 +160,31 @@ CREATE TABLE IF NOT EXISTS user_achievements (
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_achievements_user_id ON user_achievements(user_id);
+
+-- Focus sessions table (for task-linked timer tracking)
+CREATE TABLE IF NOT EXISTS focus_sessions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+    duration_minutes INTEGER DEFAULT 25,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP,
+    task_completed BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_focus_sessions_user_id ON focus_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_focus_sessions_task_id ON focus_sessions(task_id);
+
+-- Goal-Habit relation table (for multi-select linking habits to goals)
+CREATE TABLE IF NOT EXISTS goal_habits (
+    id SERIAL PRIMARY KEY,
+    goal_id INTEGER REFERENCES goals(id) ON DELETE CASCADE,
+    habit_id INTEGER REFERENCES habits(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(goal_id, habit_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_goal_habits_goal_id ON goal_habits(goal_id);
+CREATE INDEX IF NOT EXISTS idx_goal_habits_habit_id ON goal_habits(habit_id);

@@ -3,6 +3,7 @@ import { api } from '../services/api';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 interface User {
   id: number;
@@ -31,23 +32,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Silent login - restore session from localStorage
-    const storedToken = localStorage.getItem(TOKEN_KEY);
-    const storedUser = localStorage.getItem(USER_KEY);
-    
-    if (storedToken && storedUser) {
-      // Token exists, restore user
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        setToken(storedToken);
-        setUser(parsedUser);
-      } catch (e) {
-        // Invalid stored data, clear it
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
+    // Silent login - restore session from localStorage and verify with backend
+    const restoreSession = async () => {
+      const storedToken = localStorage.getItem(TOKEN_KEY);
+      const storedUser = localStorage.getItem(USER_KEY);
+      
+      if (storedToken && storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          
+          // Verify token with backend by fetching profile
+          try {
+            // Temporarily set the token for the API call
+            const response = await fetch(`${API_BASE_URL}/api/profile`, {
+              headers: {
+                'Authorization': `Bearer ${storedToken}`,
+                'Content-Type': 'application/json',
+              },
+            });
+            
+            if (response.ok) {
+              // Token is valid, restore session
+              setToken(storedToken);
+              setUser(parsedUser);
+            } else {
+              // Token invalid or expired, clear it
+              localStorage.removeItem(TOKEN_KEY);
+              localStorage.removeItem(USER_KEY);
+            }
+          } catch (verifyError) {
+            // Network error or verification failed, clear invalid token
+            localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(USER_KEY);
+          }
+        } catch (e) {
+          // Invalid stored data, clear it
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(USER_KEY);
+        }
       }
-    }
-    setIsLoading(false);
+      setIsLoading(false);
+    };
+    
+    restoreSession();
   }, []);
 
   const login = async (email: string, password: string) => {

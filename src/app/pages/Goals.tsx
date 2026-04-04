@@ -1,64 +1,25 @@
 import { useState, useEffect } from 'react';
-import { Trophy, Plus, Clock, AlertTriangle, CheckCircle, TrendingUp } from 'lucide-react';
+import { Trophy, Plus, Clock, AlertTriangle, CheckCircle, TrendingUp, Edit2, Trash2, Link2 } from 'lucide-react';
 import { api } from '../services/api';
 
 interface Goal {
   id: number;
-  priority: 'HIGH PRIORITY' | 'PERSONAL' | 'CRITICAL' | 'SUCCESS';
-  category: string;
   title: string;
-  progress: number;
-  daysLeft?: number;
-  completedDate?: string;
-  priorityColor: string;
-  categoryColor: string;
-  barColor: string;
+  description?: string;
+  priority?: 'low' | 'medium' | 'high';
+  deadline?: string;
+  is_completed: boolean;
+  completed_at?: string;
 }
 
 const SAMPLE_GOALS: Goal[] = [
   {
     id: 1,
-    priority: 'HIGH PRIORITY',
-    category: 'Strategic Growth',
     title: 'Complete Certification: Cloud Architecture',
-    progress: 65,
-    daysLeft: 12,
-    priorityColor: '#3b82f6',
-    categoryColor: '#8b949e',
-    barColor: '#7c79ff',
-  },
-  {
-    id: 2,
-    priority: 'PERSONAL',
-    category: 'Health & Wellness',
-    title: 'Marathon Preparation: Sub-4 Goal',
-    progress: 42,
-    daysLeft: 48,
-    priorityColor: '#a855f7',
-    categoryColor: '#8b949e',
-    barColor: '#7c79ff',
-  },
-  {
-    id: 3,
-    priority: 'CRITICAL',
-    category: 'Financial Planning',
-    title: 'Establish Investment Portfolio Diversity',
-    progress: 88,
-    daysLeft: 3,
-    priorityColor: '#f59e0b',
-    categoryColor: '#8b949e',
-    barColor: '#7c79ff',
-  },
-  {
-    id: 4,
-    priority: 'SUCCESS',
-    category: 'Skill Acquisition',
-    title: 'Learn Advanced Typography Principles',
-    progress: 100,
-    completedDate: 'July 12',
-    priorityColor: '#22c55e',
-    categoryColor: '#8b949e',
-    barColor: '#22c55e',
+    description: 'Get AWS certified',
+    priority: 'high',
+    deadline: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(),
+    is_completed: false,
   },
 ];
 
@@ -78,49 +39,63 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
+  const [prevMonthProgress, setPrevMonthProgress] = useState(0);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [goalProgress, setGoalProgress] = useState<Record<number, { completed: number; total: number }>>({});
   const [formData, setFormData] = useState({
     title: '',
-    category: '',
-    priority: 'HIGH PRIORITY' as Goal['priority'],
-    progress: 0,
-    daysLeft: 30,
+    description: '',
+    priority: 'medium' as 'low' | 'medium' | 'high',
+    deadline: '',
   });
 
   useEffect(() => {
     fetchGoals();
   }, []);
 
+  useEffect(() => {
+    if (goals.length > 0 && tasks.length > 0) {
+      const progress: Record<number, { completed: number; total: number }> = {};
+      for (const goal of goals) {
+        const linkedTasks = tasks.filter(t => t.goal_id === goal.id);
+        const completedCount = linkedTasks.filter(t => t.is_completed).length;
+        progress[goal.id] = { completed: completedCount, total: linkedTasks.length };
+      }
+      setGoalProgress(progress);
+      // Check if any goals should be auto-completed or reverted
+      checkAndAutoCompleteGoals(goals, tasks);
+      checkAndRevertGoals(goals, tasks);
+    }
+  }, [goals, tasks]);
+
+  // Handle forceNew from Quick Commit
+  useEffect(() => {
+    if (forceNew) {
+      setShowForm(true);
+      setFormData({ title: '', description: '', priority: 'medium', deadline: '' });
+      onFormOpened?.();
+    }
+  }, [forceNew]);
+
   const fetchGoals = async () => {
     try {
       setLoading(true);
       const data = await api.getGoals();
-      const transformedGoals: Goal[] = (data as any[]).map((g: any) => {
-        // Calculate days remaining from deadline
-        let daysLeft: number | undefined;
-        if (g.deadline) {
-          const deadline = new Date(g.deadline);
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          daysLeft = Math.max(0, Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
-        }
-        
-        // Calculate progress from current_value / target_value
-        const progress = g.target_value ? Math.round((g.current_value / g.target_value) * 100) : 0;
-        
-        return {
-          id: g.id,
-          priority: (g.priority?.toUpperCase() || 'HIGH PRIORITY') as Goal['priority'],
-          category: g.category || 'General',
-          title: g.title,
-          progress: progress,
-          daysLeft: daysLeft,
-          completedDate: g.completed_at ? new Date(g.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : undefined,
-          priorityColor: getPriorityColor(g.priority),
-          categoryColor: '#8b949e',
-          barColor: '#7c79ff',
-        };
-      });
-      setGoals(transformedGoals);
+      setGoals(data as Goal[]);
+      calculatePrevMonthProgress(data);
+      // Fetch tasks to calculate progress
+      const allTasks = await api.getTasks();
+      setTasks(allTasks as any[]);
+      // Calculate progress for each goal
+      const progress: Record<number, { completed: number; total: number }> = {};
+      const goalIds = data.map((g: Goal) => g.id);
+      for (const goalId of goalIds) {
+        const linkedTasks = (allTasks as any[]).filter(t => t.goal_id === goalId);
+        const completedCount = linkedTasks.filter(t => t.is_completed).length;
+        progress[goalId] = { completed: completedCount, total: linkedTasks.length };
+      }
+      setGoalProgress(progress);
     } catch (e) { 
       console.error('Error fetching goals:', e); 
       setGoals([]);
@@ -128,59 +103,156 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
     finally { setLoading(false); }
   };
 
-  const getPriorityColor = (p?: string): string => {
-    const pUpper = p?.toUpperCase() || '';
-    if (pUpper === 'HIGH PRIORITY' || pUpper === 'CRITICAL') return '#3b82f6';
-    if (pUpper === 'PERSONAL') return '#a855f7';
-    if (pUpper === 'SUCCESS') return '#16a34a';
-    return '#3b82f6';
+  const calculatePrevMonthProgress = (goalList: any[]) => {
+    // For simplified goals, just track goal count
+    setPrevMonthProgress(goalList.length);
   };
 
-  // Handle forceNew from Quick Commit
-  useEffect(() => {
-    if (forceNew) {
-      setShowForm(true);
-      setFormData({ title: '', category: '', priority: 'HIGH PRIORITY', progress: 0, daysLeft: 30 });
-      onFormOpened?.();
+  const handleDelete = async (id: number) => {
+    if (confirm('Are you sure you want to delete this goal?')) {
+      try {
+        await api.deleteGoal(id);
+        fetchGoals();
+      } catch (e) {
+        console.error('Error deleting goal:', e);
+      }
     }
-  }, [forceNew]);
+  };
 
-  const focusEfficiency = goals.length > 0 ? Math.round(
-    goals.filter(g => (g.progress || 0) < 100 && ((g.daysLeft ?? 9999) > 0)).reduce((acc, g) => acc + (g.progress || 0), 0) /
-    Math.max(goals.filter(g => (g.progress || 0) < 100).length, 1)
-  ) : 0;
+  const handleMarkComplete = async (goal: Goal) => {
+    try {
+      await api.updateGoal(goal.id, { is_completed: true });
+      fetchGoals();
+    } catch (e) {
+      console.error('Error completing goal:', e);
+    }
+  };
 
-  const onTrackCount = goals.filter(g => (g.progress || 0) < 100 && ((g.daysLeft ?? 0) >= 3)).length;
+  const handleEdit = (goal: Goal) => {
+    setEditingGoal(goal);
+    setFormData({
+      title: goal.title,
+      description: goal.description || '',
+      priority: goal.priority || 'medium',
+      deadline: goal.deadline ? goal.deadline.split('T')[0] : '',
+    });
+    setShowForm(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate deadline is at least 1 day in the future
+    if (formData.deadline) {
+      // Parse the date string (YYYY-MM-DD format from input)
+      const [year, month, day] = formData.deadline.split('-').map(Number);
+      const selectedDate = new Date(year, month - 1, day);
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Compare just the dates without timezone issues
+      if (selectedDate <= today) {
+        alert('Deadline must be at least 1 day in the future');
+        return;
+      }
+    }
+    
     try {
-      const goalData = {
-        title: formData.title,
-        category: formData.category,
-        priority: formData.priority.toLowerCase().replace(' ', '_'),
-        target_value: 100,
-        current_value: formData.progress,
-        deadline: new Date(Date.now() + (formData.daysLeft || 30) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      };
-      await api.createGoal(goalData);
+      if (editingGoal) {
+        await api.updateGoal(editingGoal.id, formData);
+      } else {
+        await api.createGoal(formData);
+      }
       fetchGoals();
       setShowForm(false);
-      setFormData({ title: '', category: '', priority: 'HIGH PRIORITY', progress: 0, daysLeft: 30 });
+      setEditingGoal(null);
+      setFormData({ title: '', description: '', priority: 'medium', deadline: '' });
     } catch (e) {
-      console.error('Error creating goal:', e);
-      // Fallback to local for now
-      const newGoal: Goal = {
-        id: Date.now(),
-        ...formData,
-        priorityColor: getPriorityColor(formData.priority),
-        categoryColor: '#8b949e',
-        barColor: '#7c79ff',
-      };
-      setGoals(prev => [newGoal, ...prev]);
-      setShowForm(false);
-      setFormData({ title: '', category: '', priority: 'HIGH PRIORITY', progress: 0, daysLeft: 30 });
+      console.error('Error saving goal:', e);
     }
+  };
+
+  const calculateMetrics = () => {
+    const activeGoals = goals.filter(g => !g.is_completed);
+    const completedGoals = goals.filter(g => g.is_completed);
+    
+    // Count goals on track (deadline is in the future)
+    const onTrackCount = activeGoals.filter(g => {
+      if (!g.deadline) return true; // Goals without deadline considered on track
+      const daysLeft = Math.ceil((new Date(g.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+      return daysLeft > 0;
+    }).length;
+
+    return { onTrackCount, activeGoals, completedGoals };
+  };
+
+  // Auto-complete goals when all linked tasks are completed
+  const checkAndAutoCompleteGoals = async (goalsToCheck: Goal[], tasksToCheck: any[]) => {
+    const goalsToComplete: number[] = [];
+    
+    for (const goal of goalsToCheck) {
+      if (!goal.is_completed) {
+        const linkedTasks = tasksToCheck.filter(t => t.goal_id === goal.id);
+        if (linkedTasks.length > 0 && linkedTasks.every(t => t.is_completed)) {
+          goalsToComplete.push(goal.id);
+        }
+      }
+    }
+
+    // Update completed goals
+    for (const goalId of goalsToComplete) {
+      try {
+        await api.updateGoal(goalId, { is_completed: true });
+      } catch (e) {
+        console.error('Error completing goal:', e);
+      }
+    }
+
+    // Refresh goals if any were completed
+    if (goalsToComplete.length > 0) {
+      fetchGoals();
+    }
+  };
+
+  // Revert completed goals back to active if any linked task becomes uncompleted
+  const checkAndRevertGoals = async (goalsToCheck: Goal[], tasksToCheck: any[]) => {
+    const goalsToRevert: number[] = [];
+    
+    for (const goal of goalsToCheck) {
+      if (goal.is_completed) {
+        const linkedTasks = tasksToCheck.filter(t => t.goal_id === goal.id);
+        // If any linked task is uncompleted, revert the goal
+        if (linkedTasks.length > 0 && !linkedTasks.every(t => t.is_completed)) {
+          goalsToRevert.push(goal.id);
+        }
+      }
+    }
+
+    // Update reverted goals
+    for (const goalId of goalsToRevert) {
+      try {
+        await api.updateGoal(goalId, { is_completed: false });
+      } catch (e) {
+        console.error('Error reverting goal:', e);
+      }
+    }
+
+    // Refresh goals if any were reverted
+    if (goalsToRevert.length > 0) {
+      fetchGoals();
+    }
+  };
+
+  const metrics = calculateMetrics();
+  const completionRate = metrics.activeGoals.length > 0 
+    ? Math.round((metrics.onTrackCount / metrics.activeGoals.length) * 100) 
+    : 0;
+
+  const getDaysLeft = (deadline?: string) => {
+    if (!deadline) return null;
+    const days = Math.ceil((new Date(deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, days);
   };
 
   return (
@@ -189,14 +261,14 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-[32px] font-black text-[#dae2fd] tracking-tight leading-tight">
-            Quarterly Milestones
+            Active Goals
           </h2>
           <p className="text-[#8b949e] text-[14px] mt-1">
-            Focusing on <span className="text-[#c7c4d7]">high-impact outcomes</span> for Q3 performance.
+            Focusing on <span className="text-[#c7c4d7]">{metrics.activeGoals.length} active goal{metrics.activeGoals.length !== 1 ? 's' : ''}</span> for this period.
           </p>
         </div>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => { setShowForm(!showForm); setEditingGoal(null); }}
           className="flex items-center gap-2 bg-[#7c79ff] hover:bg-[#6d69f0] text-white text-[13px] font-bold px-5 py-2.5 rounded-[10px] transition-all active:scale-95 shadow-lg shadow-[#7c79ff]/20"
         >
           <Plus className="w-4 h-4" />
@@ -204,10 +276,10 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
         </button>
       </div>
 
-      {/* Add Goal Form */}
+      {/* Add/Edit Goal Form */}
       {showForm && (
         <div className="bg-[#171f33] border border-[#ffffff0a] rounded-[14px] p-6 animate-in zoom-in-95 duration-200">
-          <h3 className="text-[18px] font-bold text-[#dae2fd] mb-5">Add New Goal</h3>
+          <h3 className="text-[18px] font-bold text-[#dae2fd] mb-5">{editingGoal ? 'Edit Goal' : 'Add New Goal'}</h3>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="block text-[#8b949e] text-[11px] font-bold uppercase tracking-widest mb-2">Goal Title</label>
@@ -220,55 +292,55 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
                 required
               />
             </div>
-            <div>
-              <label className="block text-[#8b949e] text-[11px] font-bold uppercase tracking-widest mb-2">Category</label>
-              <input
-                type="text"
-                value={formData.category}
-                onChange={e => setFormData({ ...formData, category: e.target.value })}
-                className="w-full bg-[#0d1117] text-[#dae2fd] px-4 py-3 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none transition-all text-[14px]"
-                placeholder="e.g. Strategic Growth"
-                required
+            <div className="col-span-2">
+              <label className="block text-[#8b949e] text-[11px] font-bold uppercase tracking-widest mb-2">Description</label>
+              <textarea
+                value={formData.description}
+                onChange={e => setFormData({ ...formData, description: e.target.value })}
+                className="w-full bg-[#0d1117] text-[#dae2fd] px-4 py-3 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none transition-all text-[14px] resize-none h-20"
+                placeholder="Describe your goal..."
               />
             </div>
             <div>
               <label className="block text-[#8b949e] text-[11px] font-bold uppercase tracking-widest mb-2">Priority</label>
               <select
                 value={formData.priority}
-                onChange={e => setFormData({ ...formData, priority: e.target.value as Goal['priority'] })}
-                className="w-full bg-[#0d1117] text-[#dae2fd] px-4 py-3 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none transition-all text-[14px]"
+                onChange={e => setFormData({ ...formData, priority: e.target.value as 'low' | 'medium' | 'high' })}
+                className="w-full appearance-none bg-[#0d1117] text-[#c7c4d7] px-3 py-3 rounded-[8px] border border-[#30363d] hover:border-[#7c79ff] focus:border-[#7c79ff] focus:outline-none text-[14px] cursor-pointer transition-all pr-8"
+                style={{
+                  backgroundImage: `url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2712%27%20height%3D%2712%27%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%238b949e%22%20d%3D%22M2%204l4%204%204-4%22%2F%3E%3C%2Fsvg%3E')`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 10px center',
+                  backgroundSize: '12px',
+                }}
               >
-                <option value="HIGH PRIORITY">High Priority</option>
-                <option value="PERSONAL">Personal</option>
-                <option value="CRITICAL">Critical</option>
-                <option value="SUCCESS">Success</option>
+                <option value="low">Low Priority</option>
+                <option value="medium">Medium Priority</option>
+                <option value="high">High Priority</option>
               </select>
             </div>
             <div>
-              <label className="block text-[#8b949e] text-[11px] font-bold uppercase tracking-widest mb-2">Progress (%)</label>
+              <label className="block text-[#8b949e] text-[11px] font-bold uppercase tracking-widest mb-2">Deadline</label>
               <input
-                type="number"
-                value={formData.progress}
-                onChange={e => setFormData({ ...formData, progress: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
+                type="date"
+                value={formData.deadline}
+                onChange={e => setFormData({ ...formData, deadline: e.target.value })}
                 className="w-full bg-[#0d1117] text-[#dae2fd] px-4 py-3 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none transition-all text-[14px]"
-                min="0" max="100"
+                style={{ colorScheme: 'dark' }}
               />
-            </div>
-            <div>
-              <label className="block text-[#8b949e] text-[11px] font-bold uppercase tracking-widest mb-2">Days Left</label>
-              <input
-                type="number"
-                value={formData.daysLeft}
-                onChange={e => setFormData({ ...formData, daysLeft: Math.max(0, parseInt(e.target.value) || 0) })}
-                className="w-full bg-[#0d1117] text-[#dae2fd] px-4 py-3 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none transition-all text-[14px]"
-                min="0"
-              />
+              <style>{`
+                input[type="date"]::-webkit-calendar-picker-indicator {
+                  filter: brightness(0) invert(1) brightness(1.2);
+                  cursor: pointer;
+                }
+              `}</style>
+              <p className="text-[10px] text-[#8b949e] mt-1">Must be at least 1 day from today</p>
             </div>
             <div className="col-span-2 flex gap-3 pt-2">
               <button type="submit" className="bg-[#7c79ff] hover:bg-[#6d69f0] text-white font-bold px-8 py-3 rounded-[10px] transition-all active:scale-95 text-[14px]">
-                Create Goal
+                {editingGoal ? 'Save Changes' : 'Create Goal'}
               </button>
-              <button type="button" onClick={() => setShowForm(false)} className="bg-[#222a3d] hover:bg-[#2d3449] text-[#c7c4d7] font-bold px-8 py-3 rounded-[10px] transition-all text-[14px]">
+              <button type="button" onClick={() => { setShowForm(false); setEditingGoal(null); }} className="bg-[#222a3d] hover:bg-[#2d3449] text-[#c7c4d7] font-bold px-8 py-3 rounded-[10px] transition-all text-[14px]">
                 Cancel
               </button>
             </div>
@@ -278,92 +350,149 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
 
       {/* Goal Cards */}
       <div className="space-y-4">
-        {goals.map(goal => {
-          const ps = priorityStyles[goal.priority];
-          const isComplete = goal.progress === 100;
-          const isCritical = !isComplete && (goal.daysLeft ?? 9999) <= 5;
+        {metrics.activeGoals.map(goal => {
+          const daysLeft = getDaysLeft(goal.deadline);
+          const isCritical = daysLeft !== null && daysLeft <= 5;
+          const priorityColors: Record<string, { bg: string; text: string }> = {
+            low: { bg: '#4b5563', text: '#a0aec0' },
+            medium: { bg: '#2d2a1a', text: '#f59e0b' },
+            high: { bg: '#1e3a5f', text: '#60a5fa' },
+          };
+          const priority = goal.priority || 'medium';
+          const pc = priorityColors[priority];
 
           return (
             <div
               key={goal.id}
-              className="bg-[#171f33] border border-[#ffffff08] rounded-[14px] p-6 hover:border-[#ffffff15] transition-all group"
+              className="group bg-[#171f33] border border-[#ffffff08] hover:border-[#ffffff15] rounded-[14px] p-6 transition-all"
             >
-              {/* Badges row */}
-              <div className="flex items-center gap-2 mb-2">
-                <span
-                  className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-[4px]"
-                  style={{ backgroundColor: ps.bg, color: ps.text }}
-                >
-                  {goal.priority}
-                </span>
-                <span className="text-[12px] text-[#8b949e] font-medium">{goal.category}</span>
-              </div>
-
-              {/* Title row */}
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <h3
-                  className={`text-[18px] font-bold leading-snug ${isComplete ? 'text-[#8b949e] line-through' : 'text-[#dae2fd]'
-                    }`}
-                >
-                  {goal.title}
-                </h3>
-                <div className="text-right shrink-0">
-                  <span className={`text-[28px] font-black leading-none ${isComplete ? 'text-[#22c55e]' : 'text-[#dae2fd]'}`}>
-                    {goal.progress}%
+              {/* Header with actions */}
+              <div className="flex items-start justify-between gap-4 mb-3">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-[18px] font-bold text-[#dae2fd] mb-1">{goal.title}</h3>
+                  {goal.description && <p className="text-[12px] text-[#8b949e] mb-2">{goal.description}</p>}
+                  <span
+                    className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-[4px] inline-block"
+                    style={{ backgroundColor: pc.bg, color: pc.text }}
+                  >
+                    {priority.charAt(0).toUpperCase() + priority.slice(1)} Priority
                   </span>
-                  <div className="flex items-center justify-end gap-1 mt-0.5">
-                    {isComplete ? (
-                      <>
-                        <CheckCircle className="w-3.5 h-3.5 text-[#22c55e]" />
-                        <span className="text-[11px] text-[#22c55e] font-semibold">Completed {goal.completedDate}</span>
-                      </>
-                    ) : isCritical ? (
-                      <>
-                        <AlertTriangle className="w-3.5 h-3.5 text-[#fb923c]" />
-                        <span className="text-[11px] text-[#fb923c] font-semibold">{goal.daysLeft} days left</span>
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="w-3.5 h-3.5 text-[#8b949e]" />
-                        <span className="text-[11px] text-[#8b949e] font-medium">{goal.daysLeft} days left</span>
-                      </>
-                    )}
-                  </div>
+                </div>
+                {/* Actions on hover */}
+                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <button
+                    onClick={() => handleMarkComplete(goal)}
+                    className="p-1.5 hover:bg-[#22c55e]/20 rounded-[6px] text-[#8b949e] hover:text-[#22c55e] transition-all"
+                    title="Mark goal complete"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleEdit(goal)}
+                    className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#7c79ff] transition-all"
+                    title="Edit goal"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(goal.id)}
+                    className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#f85149] transition-all"
+                    title="Delete goal"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
-              {/* Progress Bar */}
-              <div className="w-full bg-[#222a3d] rounded-full h-[4px] overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: `${goal.progress}%`,
-                    backgroundColor: goal.barColor,
-                    boxShadow: `0 0 8px ${goal.barColor}60`,
-                  }}
-                />
-              </div>
+              {/* Progress bar section */}
+              {(goalProgress[goal.id]?.total || 0) > 0 && (
+                <div className="pt-4 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">Progress</span>
+                    <span className="text-[11px] font-semibold text-[#c7c4d7]">{goalProgress[goal.id]?.completed}/{goalProgress[goal.id]?.total}</span>
+                  </div>
+                  <div className="w-full bg-[#222a3d] rounded-full h-2 overflow-hidden border border-[#ffffff08]">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#7c79ff] to-[#60a5fa] transition-all duration-500"
+                      style={{
+                        width: `${goalProgress[goal.id]?.total ? (goalProgress[goal.id]!.completed / goalProgress[goal.id]!.total) * 100 : 0}%`,
+                      }}
+                    />
+                  </div>
+                  {/* Auto-complete indicator */}
+                  {goalProgress[goal.id]?.completed === goalProgress[goal.id]?.total && goalProgress[goal.id]!.total > 0 && (
+                    <div className="pt-2 text-center">
+                      <p className="text-[11px] text-[#22c55e] font-semibold animate-pulse">✓ All tasks complete - Goal will mark complete</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Deadline section */}
+              {daysLeft !== null && (
+                <div className="flex items-center justify-start gap-2 pt-3 border-t border-[#ffffff08] mt-3">
+                  {isCritical ? (
+                    <>
+                      <AlertTriangle className="w-4 h-4 text-[#fb923c]" />
+                      <span className="text-[12px] text-[#fb923c] font-semibold">Due in {daysLeft} day{daysLeft !== 1 ? 's' : ''}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Clock className="w-4 h-4 text-[#8b949e]" />
+                      <span className="text-[12px] text-[#8b949e] font-medium">{daysLeft} day{daysLeft !== 1 ? 's' : ''} remaining</span>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
+
+        {/* Completed goals section */}
+        {metrics.completedGoals.length > 0 && (
+          <div className="space-y-2 mt-6 pt-6 border-t border-[#ffffff08]">
+            <h3 className="text-[14px] font-bold text-[#8b949e] mb-2">Completed Goals ({metrics.completedGoals.length})</h3>
+            {metrics.completedGoals.map(goal => (
+              <div
+                key={goal.id}
+                className="group bg-[#0f1520] border border-[#ffffff05] rounded-[12px] p-4 flex items-center justify-between opacity-60 hover:opacity-80 transition-all"
+              >
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <CheckCircle className="w-4 h-4 text-[#22c55e] shrink-0" />
+                  <p className="text-[13px] text-[#8b949e] line-through truncate">{goal.title}</p>
+                </div>
+                <button
+                  onClick={() => handleDelete(goal.id)}
+                  className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#f85149] opacity-0 group-hover:opacity-100 transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Bottom Stats Panel */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-        {/* Focus Efficiency */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 pt-6 border-t border-[#ffffff08]">
+        {/* Goals Summary */}
         <div className="bg-[#171f33] border border-[#ffffff08] rounded-[14px] p-6">
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#8b949e] mb-3">Focus Efficiency</p>
-          <p className="text-[40px] font-black text-[#dae2fd] leading-none">{focusEfficiency}%</p>
-          <p className="text-[12px] text-[#22c55e] mt-1 font-semibold">+4% from last month</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#8b949e] mb-3">Active Goals</p>
+          <p className="text-[40px] font-black text-[#dae2fd] leading-none">{metrics.activeGoals.length}</p>
+          <p className="text-[12px] mt-1 font-semibold text-[#8b949e]">
+            {metrics.completedGoals.length} completed in total
+          </p>
         </div>
 
         {/* On Track */}
         <div className="bg-[#171f33] border border-[#ffffff08] rounded-[14px] p-6 flex items-start justify-between">
           <div>
-            <p className="text-[13px] font-bold text-[#dae2fd] mb-1">On Track for Q3 Closure</p>
+            <p className="text-[13px] font-bold text-[#dae2fd] mb-1">On Track for Completion</p>
             <p className="text-[12px] text-[#8b949e] leading-relaxed max-w-[240px]">
-              {onTrackCount} of {goals.filter(g => g.progress < 100).length} active goals are currently within their projected timelines.{' '}
-              <span className="text-[#c7c4d7]">Performance is optimal.</span>
+              {metrics.onTrackCount} of {metrics.activeGoals.length} active {metrics.activeGoals.length === 1 ? 'goal is' : 'goals are'} currently within their projected timelines.{' '}
+              <span className={metrics.onTrackCount === metrics.activeGoals.length ? 'text-[#22c55e]' : 'text-[#c7c4d7]'}>
+                {metrics.onTrackCount === metrics.activeGoals.length ? 'All systems optimal.' : 'Some adjustments needed.'}
+              </span>
             </p>
           </div>
           <TrendingUp className="w-5 h-5 text-[#8b949e] shrink-0 mt-1" />

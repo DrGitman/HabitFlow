@@ -2,10 +2,21 @@ import { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
-  ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
-  AreaChart, Area
+  ResponsiveContainer,
+  AreaChart, Area, Legend
 } from 'recharts';
+import { Chart as ChartJS, LineElement, PointElement, Tooltip as ChartJSTooltip, Legend as ChartJSLegend, RadialLinearScale } from 'chart.js';
+import { Chart as ChartComponent } from 'react-chartjs-2';
 import { TrendingUp, Award, Target, Zap, Activity, PieChart, Info } from 'lucide-react';
+
+// Register Chart.js components
+ChartJS.register(
+  LineElement,
+  PointElement,
+  ChartJSTooltip,
+  ChartJSLegend,
+  RadialLinearScale
+);
 
 interface AnalyticsSummary {
   total_habits: number;
@@ -27,9 +38,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-[12px] shadow-2xl backdrop-blur-xl">
-        <p className="text-[#8b949e] text-[12px] font-bold uppercase tracking-wider mb-2">{label}</p>
+        <p className="text-[#e6edf3] text-[12px] font-bold uppercase tracking-wider mb-2">{label}</p>
         <p className="text-[#e6edf3] text-[16px] font-black">
-          {payload[0].value} <span className="text-[#8b949e] font-normal text-[14px]">completions</span>
+          {payload[0].value} <span className="text-[#e6edf3] font-normal text-[14px]">completions</span>
         </p>
       </div>
     );
@@ -41,6 +52,7 @@ export default function Analytics() {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [progressData, setProgressData] = useState<ProgressData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAnalytics();
@@ -49,19 +61,45 @@ export default function Analytics() {
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
+      setError(null);
       const [summaryRes, progressRes] = await Promise.all([
         api.getAnalyticsSummary(),
         api.getAnalyticsProgress(),
       ]);
 
-      setSummary(summaryRes as AnalyticsSummary);
-      setProgressData(progressRes as ProgressData[]);
+      console.log('Analytics Summary:', summaryRes);
+      console.log('Progress Data:', progressRes);
+
+      if (summaryRes) {
+        setSummary(summaryRes as AnalyticsSummary);
+      }
+      if (progressRes && Array.isArray(progressRes)) {
+        setProgressData(progressRes as ProgressData[]);
+      }
     } catch (error) {
       console.error('Error fetching analytics:', error);
+      setError('Failed to load analytics data');
     } finally {
       setLoading(false);
     }
   };
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-[60vh] p-8">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <Info className="w-12 h-12 text-[#f85149]" />
+          <p className="text-[#8b949e] font-medium">{error}</p>
+          <button
+            onClick={fetchAnalytics}
+            className="px-4 py-2 bg-[#238636] text-white rounded-lg font-medium hover:bg-[#2ea043] transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -78,14 +116,6 @@ export default function Analytics() {
     day: new Date(item.date).toLocaleDateString('en-US', { weekday: 'short' }),
     completions: item.count,
   }));
-
-  const performanceData = [
-    { metric: 'Consistency', value: summary?.completion_rate || 0 },
-    { metric: 'Tasks', value: (summary?.completed_tasks || 0) / (summary?.total_tasks || 1) * 100 },
-    { metric: 'Habits', value: (summary?.total_habits || 0) * 10 },
-    { metric: 'Goals', value: (summary?.completed_goals || 0) / (summary?.total_goals || 1) * 100 },
-    { metric: 'Streaks', value: (summary?.week_completions || 0) * 2 },
-  ];
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in duration-700">
@@ -108,10 +138,10 @@ export default function Analytics() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Task Completion Rate', value: `${summary?.completion_rate || 0}%`, icon: TrendingUp, color: '#39d353', sub: 'Overall Progress' },
-          { label: 'Tasks Completed (This Week)', value: summary?.week_completions || 0, icon: Zap, color: '#58a6ff', sub: 'Completed Tasks' },
-          { label: 'Goal Progress', value: `${summary?.completed_goals || 0}/${summary?.total_goals || 0}`, icon: Target, color: '#f85149', sub: 'Goals Achieved' },
-          { label: 'Active Habits', value: summary?.total_habits || 0, icon: Activity, color: '#bc8cff', sub: 'Habits in Progress' },
+          { label: 'Task Completion Rate', value: `${summary?.total_tasks ? Math.round((summary.completed_tasks / summary.total_tasks) * 100) : 0}%`, icon: TrendingUp, color: '#39d353', sub: 'Overall Progress' },
+          { label: 'Tasks Completed (This Week)', value: summary?.completed_tasks ?? 0, icon: Zap, color: '#58a6ff', sub: 'Completed Tasks' },
+          { label: 'Goal Progress', value: `${summary?.completed_goals ?? 0}/${summary?.total_goals ?? 0}`, icon: Target, color: '#f85149', sub: 'Goals Achieved' },
+          { label: 'Active Habits', value: summary?.total_habits ?? 0, icon: Activity, color: '#bc8cff', sub: 'Habits in Progress' },
         ].map((stat, i) => (
           <div key={i} className="bg-[#161b22] border border-[#30363d] rounded-[16px] p-6 group hover:border-[#444c56] transition-all">
             <div className="flex items-start justify-between mb-4">
@@ -142,9 +172,10 @@ export default function Analytics() {
               <span className="px-3 py-1 bg-[#1c2128] text-[#8b949e] text-[11px] font-black rounded-full border border-[#30363d]">LAST 30 DAYS</span>
             </div>
           </div>
-          <div className="h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={progressData}>
+          {progressData && progressData.length > 0 ? (
+            <div className="h-[350px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={progressData}>
                 <defs>
                   <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#58a6ff" stopOpacity={0.3}/>
@@ -178,31 +209,99 @@ export default function Analytics() {
                 />
               </AreaChart>
             </ResponsiveContainer>
-          </div>
+            </div>
+          ) : (
+            <div className="h-[350px] w-full flex items-center justify-center">
+              <div className="text-center">
+                <Activity className="w-12 h-12 text-[#30363d] mx-auto mb-3" />
+                <p className="text-[#8b949e] font-medium">No data yet - start completing habits to see your productivity flow</p>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Skill/Performance Radar */}
-        <div className="lg:col-span-1 bg-[#161b22] border border-[#30363d] rounded-[24px] p-8 min-w-[400px]">
+        {/* Skill/Performance Radar Chart using Chart.js */}
+        <div className="lg:col-span-1 bg-[#161b22] border border-[#30363d] rounded-[24px] p-8">
           <h3 className="text-[18px] font-black text-[#e6edf3] flex items-center gap-2 mb-6">
             <PieChart className="w-5 h-5 text-[#bc8cff]" />
             Capacities
           </h3>
-          <div className="h-[320px] w-full flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="70%" data={performanceData}>
-                <PolarGrid stroke="#30363d" />
-                <PolarAngleAxis dataKey="metric" tick={{ fill: '#8b949e', fontSize: 11, fontWeight: 600 }} tickLine={false} />
-                <Radar
-                  name="System"
-                  dataKey="value"
-                  stroke="#bc8cff"
-                  fill="#bc8cff"
-                  fillOpacity={0.4}
-                  strokeWidth={3}
-                  animationDuration={2500}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
+          <div className="h-[340px] w-full flex items-center justify-center">
+            {summary && (
+              <ChartComponent
+                type="radar"
+                data={{
+                  labels: ['Consistency', 'Tasks', 'Habits', 'Goals', 'Streaks'],
+                  datasets: [
+                    {
+                      data: [
+                        summary.completion_rate || 0,
+                        summary.total_tasks && summary.completed_tasks 
+                          ? (summary.completed_tasks / summary.total_tasks) * 100
+                          : 0,
+                        summary.total_goals && summary.completed_goals
+                          ? (summary.completed_goals / summary.total_goals) * 100
+                          : 0,
+                        summary.total_habits && summary.week_completions
+                          ? (summary.week_completions / summary.total_habits) * 100
+                          : 0,
+                        summary.total_habits ? (summary.total_habits / 10) * 100 : 0,
+                      ],
+                      backgroundColor: 'rgba(124, 121, 255, 0.35)',
+                      borderColor: '#58a6ff',
+                      borderWidth: 2.5,
+                      pointBackgroundColor: '#ff006e',
+                      pointBorderColor: '#161b22',
+                      pointBorderWidth: 2,
+                      pointRadius: 5,
+                      pointHoverRadius: 8,
+                      fill: true,
+                      tension: 0.4,
+                      borderCapStyle: 'round',
+                      borderJoinStyle: 'round',
+                    },
+                  ],
+                }}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: true,
+                  plugins: {
+                    tooltip: {
+                      backgroundColor: '#161b22',
+                      titleColor: '#8b949e',
+                      bodyColor: '#e6edf3',
+                      borderColor: '#30363d',
+                      borderWidth: 1,
+                      padding: 12,
+                      titleFont: { size: 12, weight: 'bold' },
+                      bodyFont: { size: 14, weight: 'bold' },
+                      displayColors: false,
+                    },
+                    legend: {
+                      display: false,
+                    },
+                  },
+                  scales: {
+                    r: {
+                      min: 0,
+                      max: 100,
+                      ticks: {
+                        display: false,
+                        stepSize: 20,
+                      },
+                      grid: {
+                        color: '#30363d',
+                      },
+                      pointLabels: {
+                        color: '#e6edf3',
+                        font: { size: 13, weight: 'bold' },
+                        padding: 15,
+                      },
+                    },
+                  },
+                }}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -213,9 +312,10 @@ export default function Analytics() {
           <BarChart className="w-5 h-5 text-[#39d353]" />
           Weekly Velocity
         </h3>
-        <div className="h-[300px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={weeklyData}>
+        {weeklyData && weeklyData.length > 0 ? (
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weeklyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#30363d" vertical={false} />
               <XAxis 
                 dataKey="day" 
@@ -232,7 +332,7 @@ export default function Analytics() {
               />
               <Tooltip 
                 cursor={{ fill: '#30363d', opacity: 0.4 }}
-                contentStyle={{ backgroundColor: '#161b22', border: '1px solid #30363d', borderRadius: '12px' }}
+                content={<CustomTooltip />}
               />
               <Bar 
                 dataKey="completions" 
@@ -243,7 +343,15 @@ export default function Analytics() {
               />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+          </div>
+        ) : (
+          <div className="h-[300px] w-full flex items-center justify-center">
+            <div className="text-center">
+              <BarChart className="w-12 h-12 text-[#30363d] mx-auto mb-3" />
+              <p className="text-[#8b949e] font-medium">No data yet - start completing habits to see weekly velocity</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

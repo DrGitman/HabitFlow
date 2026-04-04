@@ -320,6 +320,63 @@ class ApiService {
   async getRecentActivity() {
     return this.request('/api/recent-activity');
   }
+
+  // Focus Sessions
+  async startFocusSession(taskId: number, durationMinutes: number = 25) {
+    return this.request('/api/focus-sessions/start', {
+      method: 'POST',
+      body: JSON.stringify({ task_id: taskId, duration_minutes: durationMinutes }),
+    });
+  }
+
+  async completeFocusSession(sessionId: number, taskCompleted: boolean = false) {
+    return this.request(`/api/focus-sessions/${sessionId}/complete`, {
+      method: 'POST',
+      body: JSON.stringify({ task_completed: taskCompleted }),
+    });
+  }
+
+  async getFocusSession(sessionId: number) {
+    return this.request(`/api/focus-sessions/${sessionId}`);
+  }
+
+  async getUserFocusSessions(taskId?: number) {
+    const url = taskId ? `/api/focus-sessions?task_id=${taskId}` : '/api/focus-sessions';
+    return this.request(url);
+  }
+
+  async getTaskFocusSessions(taskId: number) {
+    return this.request(`/api/focus-sessions/task/${taskId}`);
+  }
+
+  async getTodayFocusSessions() {
+    return this.request('/api/focus-sessions/today');
+  }
+
+  // Goal Linking
+  async linkHabitToGoal(goalId: number, habitId: number) {
+    return this.request(`/api/goals/${goalId}/link-habit`, {
+      method: 'POST',
+      body: JSON.stringify({ habit_id: habitId }),
+    });
+  }
+
+  async unlinkHabitFromGoal(goalId: number, habitId: number) {
+    return this.request(`/api/goals/${goalId}/unlink-habit/${habitId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async linkHabitsToGoal(goalId: number, habitIds: number[]) {
+    return this.request(`/api/goals/${goalId}/link-habits`, {
+      method: 'POST',
+      body: JSON.stringify({ habit_ids: habitIds }),
+    });
+  }
+
+  async getLinkedHabits(goalId: number) {
+    return this.request(`/api/goals/${goalId}/linked-habits`);
+  }
 }
 
 export const api = new ApiService();

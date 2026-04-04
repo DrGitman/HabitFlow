@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { api } from '../services/api';
-import { Check, Plus, X, Flame, Droplets, Brain, BookOpen, Dumbbell, Code2 } from 'lucide-react';
+import { Check, Plus, X, Flame, Droplets, Brain, BookOpen, Dumbbell, Code2, Link2 } from 'lucide-react';
 
 interface Habit {
   id: number;
@@ -80,6 +80,189 @@ function buildHeatmapColors(progress: ProgressData[]): string[] {
   return cells;
 }
 
+// Habit Goal Link Dropdown (Multi-select)
+function HabitGoalLinkDropdown({
+  isOpen,
+  habitId,
+  linkedGoalIds,
+  goals,
+  onConfirm,
+  onClose,
+  buttonRef,
+}: {
+  isOpen: boolean;
+  habitId: number | null;
+  linkedGoalIds: number[];
+  goals: Array<{ id: number; title: string }>;
+  onConfirm: (goalIds: number[]) => void;
+  onClose: () => void;
+  buttonRef: React.RefObject<HTMLButtonElement>;
+}) {
+  const [search, setSearch] = useState('');
+  const [selectedGoalIds, setSelectedGoalIds] = useState<number[]>(linkedGoalIds);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredGoals = search.trim()
+    ? goals.filter(goal => goal.title.toLowerCase().includes(search.toLowerCase()))
+    : [];
+
+  // Recently linked goals (first 3)
+  const recentGoals = goals.slice(0, 3);
+  
+  // Popular goals - for now same as recent
+  const popularGoals = goals.slice(0, 3);
+
+  useEffect(() => {
+    setSelectedGoalIds(linkedGoalIds);
+  }, [linkedGoalIds, isOpen]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen, onClose]);
+
+  const toggleGoal = (goalId: number) => {
+    setSelectedGoalIds(prev =>
+      prev.includes(goalId) ? prev.filter(id => id !== goalId) : [...prev, goalId]
+    );
+  };
+
+  if (!isOpen || habitId === null) return null;
+
+  const displaySearch = search.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+      <div
+        ref={dropdownRef}
+        className="bg-[#171f33] border border-[#ffffff10] rounded-[16px] w-full max-w-[480px] shadow-2xl animate-in zoom-in-95 duration-200 max-h-[80vh] overflow-hidden flex flex-col"
+      >
+        {/* Search bar section */}
+        <div className="p-4 border-b border-[#ffffff08] flex-shrink-0">
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                placeholder="Search goals..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-[#222a3d] border border-[#ffffff08] rounded-[8px] text-[#dae2fd] placeholder-[#8b949e] text-[13px] px-4 py-2.5 focus:outline-none focus:border-[#7c79ff] focus:ring-1 focus:ring-[#7c79ff]/30"
+                autoFocus
+              />
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2.5 hover:bg-[#222a3d] rounded-[8px] text-[#8b949e] hover:text-[#c7c4d7] transition-all"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content area */}
+        <div className="overflow-y-auto flex-1">
+          {goals.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-[13px] text-[#8b949e]">No goals available to link</p>
+            </div>
+          ) : displaySearch ? (
+            <div className="p-4">
+              {filteredGoals.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-[13px] text-[#8b949e]">No goals found</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredGoals.map(goal => (
+                    <label
+                      key={goal.id}
+                      className="flex items-center gap-3 px-4 py-3 rounded-[8px] bg-[#222a3d] border border-[#ffffff08] hover:border-[#ffffff15] cursor-pointer transition-all"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedGoalIds.includes(goal.id)}
+                        onChange={() => toggleGoal(goal.id)}
+                        className="w-4 h-4 rounded-[4px] accent-[#7c79ff] cursor-pointer"
+                      />
+                      <p className="text-[13px] font-semibold text-[#c7c4d7] truncate flex-1">{goal.title}</p>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-4 space-y-6">
+              {/* Recently Linked */}
+              {recentGoals.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-bold text-[#8b949e] uppercase tracking-widest mb-3 px-2">Recently Linked</p>
+                  <div className="space-y-2">
+                    {recentGoals.map(goal => (
+                      <label
+                        key={goal.id}
+                        className="flex items-center gap-3 px-4 py-3 rounded-[8px] bg-[#222a3d] border border-[#ffffff08] hover:border-[#ffffff15] cursor-pointer transition-all"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedGoalIds.includes(goal.id)}
+                          onChange={() => toggleGoal(goal.id)}
+                          className="w-4 h-4 rounded-[4px] accent-[#7c79ff] cursor-pointer"
+                        />
+                        <p className="text-[13px] font-semibold text-[#c7c4d7] truncate flex-1">{goal.title}</p>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Popular Goals */}
+              {popularGoals.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-bold text-[#8b949e] uppercase tracking-widest mb-3 px-2">Popular Goals</p>
+                  <div className="space-y-2">
+                    {popularGoals.map(goal => (
+                      <label
+                        key={goal.id}
+                        className="flex items-center gap-3 px-4 py-3 rounded-[8px] bg-[#222a3d] border border-[#ffffff08] hover:border-[#ffffff15] cursor-pointer transition-all"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedGoalIds.includes(goal.id)}
+                          onChange={() => toggleGoal(goal.id)}
+                          className="w-4 h-4 rounded-[4px] accent-[#7c79ff] cursor-pointer"
+                        />
+                        <p className="text-[13px] font-semibold text-[#c7c4d7] truncate flex-1">{goal.title}</p>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer with action button */}
+        <div className="p-4 border-t border-[#ffffff08] bg-[#0f1419] flex-shrink-0">
+          <button
+            onClick={() => {
+              onConfirm(selectedGoalIds);
+              onClose();
+            }}
+            className="w-full bg-[#7c79ff] hover:bg-[#6d69f0] text-white font-bold px-4 py-2.5 rounded-[8px] transition-all text-[13px]"
+          >
+            Link {selectedGoalIds.length > 0 ? `(${selectedGoalIds.length})` : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean; onFormOpened?: () => void }) {
   const [habits,  setHabits]  = useState<Habit[]>([]);
   const [streaks, setStreaks] = useState<any[]>([]);
@@ -88,6 +271,11 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
   const [showForm, setShowForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [completedIds, setCompletedIds] = useState<Set<number>>(new Set());
+  const [goals, setGoals] = useState<Array<{ id: number; title: string }>>([]);
+  const [linkDropdownOpen, setLinkDropdownOpen] = useState(false);
+  const [linkingHabitId, setLinkingHabitId] = useState<number | null>(null);
+  const [linkedGoalIds, setLinkedGoalIds] = useState<number[]>([]);
+  const linkButtonRef = useRef<HTMLButtonElement>(null);
   const [formData, setFormData] = useState({
     name: '', description: '', category: '', frequency: 'daily', target_count: 1, color: '#39d353',
   });
@@ -118,6 +306,15 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
       setHabits(h as Habit[]);
       setStreaks(s as any[]);
       setProgress(p as ProgressData[]);
+
+      // Fetch goals for linking
+      try {
+        const goalsData = await api.getGoals();
+        const formattedGoals = (goalsData as any[]).map(g => ({ id: g.id, title: g.title }));
+        setGoals(formattedGoals);
+      } catch (e) {
+        console.error('Error fetching goals:', e);
+      }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -150,6 +347,22 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
       setFormData({ name:'', description:'', category:'', frequency:'daily', target_count:1, color:'#39d353' });
       setShowForm(false); setEditingHabit(null); fetchHabits();
     } catch (e) { console.error(e); }
+  };
+
+  const handleLinkGoals = async (goalIds: number[]) => {
+    if (linkingHabitId === null) return;
+    try {
+      // Link the habit to each selected goal
+      for (const goalId of goalIds) {
+        await api.linkHabitToGoal(goalId, linkingHabitId);
+      }
+      fetchHabits();
+      setLinkDropdownOpen(false);
+      setLinkingHabitId(null);
+      setLinkedGoalIds([]);
+    } catch (e) {
+      console.error('Error linking goals:', e);
+    }
   };
 
   const getStreak = (id: number) => streaks.find((s: any) => s.habit_id === id)?.current_streak || 0;
@@ -262,6 +475,18 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
 
               {/* Edit/Delete actions */}
               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity mr-2">
+                <button
+                  ref={linkingHabitId === habit.id ? linkButtonRef : null}
+                  onClick={() => {
+                    setLinkingHabitId(habit.id);
+                    setLinkedGoalIds([]); // Will be filled from API when needed
+                    setLinkDropdownOpen(true);
+                  }}
+                  className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#7c79ff] transition-all"
+                  title="Link to goals"
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                </button>
                 <button
                   onClick={() => handleEdit(habit)}
                   className="px-2 py-1 text-[11px] text-[#8b949e] hover:text-[#7c79ff] hover:bg-[#222a3d] rounded-[6px] transition-all"
@@ -398,6 +623,21 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
           <span className="text-[10px] text-[#8b949e]">{todayLabel}</span>
         </div>
       </div>
+
+      {/* Habit Goal Link Dropdown */}
+      <HabitGoalLinkDropdown
+        isOpen={linkDropdownOpen}
+        habitId={linkingHabitId}
+        linkedGoalIds={linkedGoalIds}
+        goals={goals}
+        onConfirm={handleLinkGoals}
+        onClose={() => {
+          setLinkDropdownOpen(false);
+          setLinkingHabitId(null);
+          setLinkedGoalIds([]);
+        }}
+        buttonRef={linkButtonRef}
+      />
     </div>
   );
 }
