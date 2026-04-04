@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { 
@@ -63,6 +64,7 @@ const Modal = ({ isOpen, onClose, title, children }: any) => {
 };
 
 export default function Profile() {
+  const location = useLocation();
   const { user, setUser } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
@@ -87,9 +89,18 @@ export default function Profile() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
+  // Fetch profile data when component mounts or when navigating to the profile page
   useEffect(() => {
     fetchProfileData();
-  }, []);
+    // Refresh profile when the tab becomes visible again
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchProfileData();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [location.pathname]);
 
   const fetchProfileData = async () => {
     try {
@@ -100,14 +111,57 @@ export default function Profile() {
         api.getAchievements()
       ]);
 
-      const prof = profileRes as UserProfile;
-      setProfile(prof);
-      setDisplayName(prof.full_name || '');
-      setEmail(prof.email || '');
+      console.log('Profile API Response:', profileRes);
+      console.log('User from Auth:', user);
+      
+      // The API returns the full user profile with all fields
+      const prof = profileRes as UserProfile | null;
+      
+      // Always use the API response if we got it, don't fall back to auth user
+      if (prof && prof.id) {
+        console.log('Setting profile from API:', prof);
+        setProfile(prof);
+        setDisplayName(prof.full_name || '');
+        setEmail(prof.email || '');
+        setAvatarPreview(null);
+      } else if (user) {
+        // Only fall back to auth user as last resort
+        console.log('Setting profile from auth user (API returned null):', user);
+        setProfile({
+          id: user.id,
+          email: user.email,
+          full_name: user.full_name,
+          avatar_url: user.avatar_url,
+          rank: user.rank
+        } as UserProfile);
+        setDisplayName(user.full_name || '');
+        setEmail(user.email || '');
+        setAvatarPreview(null);
+      } else {
+        console.warn('No profile data available');
+        setProfile(null);
+        setDisplayName('');
+        setEmail('');
+        setAvatarPreview(null);
+      }
+      
       setSummary(summaryRes as AnalyticsSummary);
       setAchievements(achievementsRes as Achievement[]);
     } catch (error) {
       console.error('Error fetching profile data:', error);
+      // Try to initialize from localStorage as fallback
+      const storedUser = localStorage.getItem('auth_user');
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          console.log('Using stored user data as fallback');
+          setProfile(parsedUser);
+          setDisplayName(parsedUser.full_name || '');
+          setEmail(parsedUser.email || '');
+        } catch (e) {
+          console.error('Failed to parse stored user:', e);
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -125,9 +179,11 @@ export default function Profile() {
       const updatedUser = await api.updateProfile(payload);
       setProfile(updatedUser as UserProfile);
       setUser(updatedUser as any);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      alert('Profile updated successfully!');
+      // Persist updated user in the same key the app uses for auth
+      localStorage.setItem('auth_user', JSON.stringify(updatedUser));
+      // Clear avatar preview after successful save
       setAvatarPreview(null);
+      alert('Profile updated successfully!');
     } catch (error: any) {
       console.error('Error updating profile:', error);
       alert(error.message || 'Failed to update profile.');
@@ -244,7 +300,7 @@ export default function Profile() {
             {/* Info Section */}
             <div className="flex-1 text-center md:text-left space-y-6">
               <div>
-                <p className="text-[#7c79ff] text-[10px] font-black uppercase tracking-[0.2em] mb-1">{profile?.rank || 'ARCHITECT RANK'}</p>
+                <p className="text-[#7c79ff] text-[10px] font-black uppercase tracking-[0.2em] mb-1">{profile?.rank || 'Beginner'}</p>
                 <h1 className="text-[#ffffff] text-[32px] font-black tracking-tight leading-none">{profile?.full_name || 'System User'}</h1>
                 <p className="text-[#8b949e] text-[13px] mt-1 font-medium">{profile?.email}</p>
               </div>
@@ -256,13 +312,13 @@ export default function Profile() {
                 </div>
                 <div>
                   <p className="text-[#8b949e] text-[9px] font-black uppercase tracking-[0.15em] mb-1 opacity-50">Timezone</p>
-                  <p className="text-[#e6edf3] text-[13px] font-bold">{profile?.timezone || 'PST (UTC-8)'}</p>
+                  <p className="text-[#e6edf3] text-[13px] font-bold">{profile?.timezone || 'UTC'}</p>
                 </div>
                 <div>
                   <p className="text-[#8b949e] text-[9px] font-black uppercase tracking-[0.15em] mb-1 opacity-50">Status</p>
                   <div className="flex items-center gap-2 justify-center md:justify-start">
                     <span className="w-2 h-2 rounded-full bg-[#39d353] shadow-[0_0_8px_rgba(57,211,83,0.5)]" />
-                    <p className="text-[#e6edf3] text-[13px] font-bold">{profile?.status || 'Focusing'}</p>
+                    <p className="text-[#e6edf3] text-[13px] font-bold">{profile?.status || 'Active'}</p>
                   </div>
                 </div>
               </div>

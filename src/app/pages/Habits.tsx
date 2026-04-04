@@ -80,7 +80,7 @@ function buildHeatmapColors(progress: ProgressData[]): string[] {
   return cells;
 }
 
-export default function Habits() {
+export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean; onFormOpened?: () => void }) {
   const [habits,  setHabits]  = useState<Habit[]>([]);
   const [streaks, setStreaks] = useState<any[]>([]);
   const [progress, setProgress] = useState<ProgressData[]>([]);
@@ -96,6 +96,16 @@ export default function Habits() {
   const todayDow  = (new Date().getDay() + 6) % 7; // 0=Mon
 
   useEffect(() => { fetchHabits(); }, []);
+
+  // Handle forceNew from Quick Commit
+  useEffect(() => {
+    if (forceNew) {
+      setShowForm(true);
+      setEditingHabit(null);
+      setFormData({ name: '', description: '', category: '', frequency: 'daily', target_count: 1, color: '#39d353' });
+      onFormOpened?.();
+    }
+  }, [forceNew]);
 
   const fetchHabits = async () => {
     try {

@@ -111,20 +111,26 @@ export default function Navigation() {
       </div>
 
       {/* Bottom Actions */}
-      <div className="p-6 space-y-4 relative">
+      <div className="p-6 space-y-4 relative" onClick={(e) => {
+        // Close popup when clicking outside
+        if (showQuickOptions && !(e.target as HTMLElement).closest('.quick-option')) {
+          setShowQuickOptions(false);
+        }
+      }}>
         {/* Quick Options Popup */}
         {showQuickOptions && (
-          <div className="absolute bottom-full left-0 right-0 mb-3 bg-[#161b22] border border-[#30363d] rounded-[16px] p-4 shadow-xl">
+          <div className="absolute bottom-full left-0 right-0 mb-3 bg-[#161b22] border border-[#30363d] rounded-[16px] p-4 shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-200">
             <p className="text-[10px] font-black uppercase tracking-widest text-[#8b949e] mb-3 text-center">Quick Add</p>
             <div className="flex justify-center gap-4">
               {quickOptions.map((option, i) => (
                 <button
                   key={i}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     option.action();
                     setShowQuickOptions(false);
                   }}
-                  className={`w-12 h-12 rounded-full ${option.bgColor} border ${option.borderColor} flex items-center justify-center transition-all hover:scale-110 hover:shadow-lg`}
+                  className={`quick-option w-12 h-12 rounded-full ${option.bgColor} border ${option.borderColor} flex items-center justify-center transition-all hover:scale-110 hover:shadow-lg cursor-pointer`}
                 >
                   <option.icon className="w-5 h-5" style={{ color: option.color }} />
                 </button>

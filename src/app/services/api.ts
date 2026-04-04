@@ -221,6 +221,53 @@ class ApiService {
     return this.request('/api/analytics/calendar-stats');
   }
 
+  // Planning / Schedule APIs
+  async getUnscheduledItems(date?: string) {
+    const params = date ? `?scheduled_date=${date}` : '';
+    return this.request(`/api/planning/unscheduled-tasks${params}`);
+  }
+
+  async scheduleItem(data: any) {
+    return this.request('/api/planning/schedule-item', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async autoSchedule(data: any) {
+    return this.request('/api/planning/auto-schedule', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async confirmScheduledItems(items: any[]) {
+    return this.request('/api/planning/confirm', {
+      method: 'POST',
+      body: JSON.stringify(items),
+    });
+  }
+
+  async getScheduledItems(startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    const queryString = params.toString();
+    return this.request(`/api/planning/scheduled${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async deleteScheduledItem(id: number) {
+    return this.request(`/api/planning/item/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async clearDrafts() {
+    return this.request('/api/planning/clear-drafts', {
+      method: 'POST',
+    });
+  }
+
   async getNotifications() {
     return this.request('/api/notifications');
   }

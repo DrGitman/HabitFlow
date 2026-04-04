@@ -93,13 +93,13 @@ export default function Analytics() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-[32px] font-black text-[#e6edf3] tracking-tight">Analytics</h2>
-          <p className="text-[#8b949e] text-[14px] mt-1 font-medium">Neural processing of your productivity architecture.</p>
+          <p className="text-[#8b949e] text-[14px] mt-1 font-medium">Your Productivity Overview</p>
         </div>
         {summary?.momentum !== undefined && (
           <div className="flex items-center gap-3 bg-[#161b22] px-4 py-2 rounded-full border border-[#30363d]">
             <TrendingUp className={`w-4 h-4 ${summary.momentum >= 0 ? 'text-[#39d353]' : 'text-[#f85149]'}`} />
             <span className="text-[12px] font-black text-[#e6edf3]">
-              Momentum: <span className={summary.momentum >= 0 ? 'text-[#39d353]' : 'text-[#f85149]'}>{summary.momentum >= 0 ? '+' : ''}{summary.momentum}%</span> vs last week
+              Momentum: <span className={summary.momentum >= 0 ? 'text-[#39d353]' : 'text-[#f85149]'}>+{summary.momentum}%</span> vs last week
             </span>
           </div>
         )}
@@ -108,10 +108,10 @@ export default function Analytics() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'System Efficiency', value: `${summary?.completion_rate || 0}%`, icon: TrendingUp, color: '#39d353', sub: 'Global performance' },
-          { label: 'Weekly Velocity', value: summary?.week_completions || 0, icon: Zap, color: '#58a6ff', sub: 'Units completed' },
-          { label: 'Goal Realization', value: `${summary?.completed_goals || 0}/${summary?.total_goals || 0}`, icon: Target, color: '#f85149', sub: 'Target convergence' },
-          { label: 'Active Patterns', value: summary?.total_habits || 0, icon: Activity, color: '#bc8cff', sub: 'Running habits' },
+          { label: 'Task Completion Rate', value: `${summary?.completion_rate || 0}%`, icon: TrendingUp, color: '#39d353', sub: 'Overall Progress' },
+          { label: 'Tasks Completed (This Week)', value: summary?.week_completions || 0, icon: Zap, color: '#58a6ff', sub: 'Completed Tasks' },
+          { label: 'Goal Progress', value: `${summary?.completed_goals || 0}/${summary?.total_goals || 0}`, icon: Target, color: '#f85149', sub: 'Goals Achieved' },
+          { label: 'Active Habits', value: summary?.total_habits || 0, icon: Activity, color: '#bc8cff', sub: 'Habits in Progress' },
         ].map((stat, i) => (
           <div key={i} className="bg-[#161b22] border border-[#30363d] rounded-[16px] p-6 group hover:border-[#444c56] transition-all">
             <div className="flex items-start justify-between mb-4">

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Trophy, Plus, Clock, AlertTriangle, CheckCircle, TrendingUp } from 'lucide-react';
+import { api } from '../services/api';
 
 interface Goal {
   id: number;
@@ -68,8 +69,14 @@ const priorityStyles: Record<string, { bg: string; text: string }> = {
   SUCCESS: { bg: '#16a34a20', text: '#4ade80' },
 };
 
-export default function Goals() {
-  const [goals, setGoals] = useState<Goal[]>(SAMPLE_GOALS);
+interface GoalsProps {
+  forceNew?: boolean;
+  onFormOpened?: () => void;
+}
+
+export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
@@ -79,29 +86,101 @@ export default function Goals() {
     daysLeft: 30,
   });
 
-  const focusEfficiency = Math.round(
-    goals.filter(g => g.progress < 100 && (g.daysLeft ?? 9999) > 0).reduce((acc, g) => acc + g.progress, 0) /
-    Math.max(goals.filter(g => g.progress < 100).length, 1)
-  );
+  useEffect(() => {
+    fetchGoals();
+  }, []);
 
-  const onTrackCount = goals.filter(g => g.progress < 100 && (g.daysLeft ?? 0) >= 3).length;
+  const fetchGoals = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getGoals();
+      const transformedGoals: Goal[] = (data as any[]).map((g: any) => {
+        // Calculate days remaining from deadline
+        let daysLeft: number | undefined;
+        if (g.deadline) {
+          const deadline = new Date(g.deadline);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          daysLeft = Math.max(0, Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+        }
+        
+        // Calculate progress from current_value / target_value
+        const progress = g.target_value ? Math.round((g.current_value / g.target_value) * 100) : 0;
+        
+        return {
+          id: g.id,
+          priority: (g.priority?.toUpperCase() || 'HIGH PRIORITY') as Goal['priority'],
+          category: g.category || 'General',
+          title: g.title,
+          progress: progress,
+          daysLeft: daysLeft,
+          completedDate: g.completed_at ? new Date(g.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : undefined,
+          priorityColor: getPriorityColor(g.priority),
+          categoryColor: '#8b949e',
+          barColor: '#7c79ff',
+        };
+      });
+      setGoals(transformedGoals);
+    } catch (e) { 
+      console.error('Error fetching goals:', e); 
+      setGoals([]);
+    }
+    finally { setLoading(false); }
+  };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const getPriorityColor = (p?: string): string => {
+    const pUpper = p?.toUpperCase() || '';
+    if (pUpper === 'HIGH PRIORITY' || pUpper === 'CRITICAL') return '#3b82f6';
+    if (pUpper === 'PERSONAL') return '#a855f7';
+    if (pUpper === 'SUCCESS') return '#16a34a';
+    return '#3b82f6';
+  };
+
+  // Handle forceNew from Quick Commit
+  useEffect(() => {
+    if (forceNew) {
+      setShowForm(true);
+      setFormData({ title: '', category: '', priority: 'HIGH PRIORITY', progress: 0, daysLeft: 30 });
+      onFormOpened?.();
+    }
+  }, [forceNew]);
+
+  const focusEfficiency = goals.length > 0 ? Math.round(
+    goals.filter(g => (g.progress || 0) < 100 && ((g.daysLeft ?? 9999) > 0)).reduce((acc, g) => acc + (g.progress || 0), 0) /
+    Math.max(goals.filter(g => (g.progress || 0) < 100).length, 1)
+  ) : 0;
+
+  const onTrackCount = goals.filter(g => (g.progress || 0) < 100 && ((g.daysLeft ?? 0) >= 3)).length;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newGoal: Goal = {
-      id: Date.now(),
-      priority: formData.priority,
-      category: formData.category,
-      title: formData.title,
-      progress: formData.progress,
-      daysLeft: formData.daysLeft,
-      priorityColor: priorityStyles[formData.priority].text,
-      categoryColor: '#8b949e',
-      barColor: formData.priority === 'SUCCESS' ? '#22c55e' : '#7c79ff',
-    };
-    setGoals(prev => [newGoal, ...prev]);
-    setShowForm(false);
-    setFormData({ title: '', category: '', priority: 'HIGH PRIORITY', progress: 0, daysLeft: 30 });
+    try {
+      const goalData = {
+        title: formData.title,
+        category: formData.category,
+        priority: formData.priority.toLowerCase().replace(' ', '_'),
+        target_value: 100,
+        current_value: formData.progress,
+        deadline: new Date(Date.now() + (formData.daysLeft || 30) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      };
+      await api.createGoal(goalData);
+      fetchGoals();
+      setShowForm(false);
+      setFormData({ title: '', category: '', priority: 'HIGH PRIORITY', progress: 0, daysLeft: 30 });
+    } catch (e) {
+      console.error('Error creating goal:', e);
+      // Fallback to local for now
+      const newGoal: Goal = {
+        id: Date.now(),
+        ...formData,
+        priorityColor: getPriorityColor(formData.priority),
+        categoryColor: '#8b949e',
+        barColor: '#7c79ff',
+      };
+      setGoals(prev => [newGoal, ...prev]);
+      setShowForm(false);
+      setFormData({ title: '', category: '', priority: 'HIGH PRIORITY', progress: 0, daysLeft: 30 });
+    }
   };
 
   return (

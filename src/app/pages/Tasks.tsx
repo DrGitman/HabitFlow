@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import {
-  Check, Plus, Clock, CheckCircle2, Trash2, Edit2, Tag,
+  Check, Plus, Clock, CheckCircle2, Trash2, Edit2, Tag, Calendar as CalendarIcon,
 } from 'lucide-react';
 
 interface Task {
@@ -141,7 +141,12 @@ function UpcomingTasks({ tasks }: { tasks: Task[] }) {
 
 type Filter = 'all' | 'work' | 'personal';
 
-export default function Tasks() {
+interface TasksProps {
+  forceNew?: boolean;
+  onFormOpened?: () => void;
+}
+
+export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
   const [tasks,       setTasks]       = useState<Task[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [filter,      setFilter]      = useState<Filter>('all');
@@ -152,6 +157,16 @@ export default function Tasks() {
   });
 
   useEffect(() => { fetchTasks(); }, []);
+
+  // Handle forceNew from Quick Commit
+  useEffect(() => {
+    if (forceNew) {
+      setShowForm(true);
+      setEditingTask(null);
+      setFormData({ title: '', description: '', category: '', priority: 'medium', due_date: '' });
+      onFormOpened?.();
+    }
+  }, [forceNew]);
 
   const fetchTasks = async () => {
     try {
@@ -338,7 +353,7 @@ export default function Tasks() {
                   <select
                     value={formData.priority}
                     onChange={e => setFormData({ ...formData, priority: e.target.value as Task['priority'] })}
-                    className="col-span-1 bg-[#0d1117] text-[#dae2fd] px-3 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none text-[13px]"
+                    className="appearance-none bg-[#0d1117] text-[#c7c4d7] px-3 py-2.5 rounded-[8px] border border-[#30363d] focus:border-[#7c79ff] focus:outline-none text-[13px] cursor-pointer pr-8 bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%238b949e%22%20d%3D%22M2%204l4%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_10px_center]"
                   >
                     <option value="high">High Priority</option>
                     <option value="medium">Work</option>

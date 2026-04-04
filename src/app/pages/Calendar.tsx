@@ -13,9 +13,10 @@ import {
   addDays, 
   eachDayOfInterval,
   isToday,
-  startOfToday
+  startOfToday,
+  addDays as addDaysFn
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus, Clock, CheckCircle2, AlertCircle, Calendar as CalendarIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Clock, CheckCircle2, AlertCircle, Calendar as CalendarIcon, X, Zap, Target, RotateCcw } from 'lucide-react';
 
 interface CalendarEvent {
   id: number;
@@ -26,6 +27,347 @@ interface CalendarEvent {
   priority?: string;
 }
 
+// Plan Now Modal Component
+function PlanNowModal({ isOpen, onClose, onConfirm }: { isOpen: boolean; onClose: () => void; onConfirm: (items: any[], date: string) => void }) {
+  const [step, setStep] = useState<'select-date' | 'select-items' | 'preview'>('select-date');
+  const [selectedDate, setSelectedDate] = useState<string>(format(startOfToday(), 'yyyy-MM-dd'));
+  const [unscheduledItems, setUnscheduledItems] = useState<any>({ tasks: [], habits: [] });
+  const [selectedTasks, setSelectedTasks] = useState<number[]>([]);
+  const [selectedHabits, setSelectedHabits] = useState<number[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [autoSchedule, setAutoSchedule] = useState(false);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [scheduleTime, setScheduleTime] = useState({ start: '09:00', end: '18:00' });
+
+  const dateOptions = [
+    { label: 'Today', date: format(startOfToday(), 'yyyy-MM-dd') },
+    { label: 'Tomorrow', date: format(addDaysFn(startOfToday(), 1), 'yyyy-MM-dd') },
+    { label: 'Custom', date: 'custom' }
+  ];
+
+  const fetchUnscheduled = async () => {
+    setLoading(true);
+    try {
+      const data = await api.getUnscheduledItems(selectedDate);
+      setUnscheduledItems(data as any);
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const handleDateSelect = (date: string) => {
+    if (date === 'custom') {
+      // For custom, just show a date picker - simplified for now
+      const input = document.createElement('input');
+      input.type = 'date';
+      input.value = selectedDate;
+      input.showPicker?.();
+      input.onchange = (e: any) => {
+        if (e.target.value) {
+          setSelectedDate(e.target.value);
+        }
+      };
+      input.click();
+    } else {
+      setSelectedDate(date);
+    }
+  };
+
+  const handleNext = () => {
+    if (step === 'select-date') {
+      fetchUnscheduled();
+      setStep('select-items');
+    } else if (step === 'select-items') {
+      if (autoSchedule) {
+        generateAutoSchedule();
+      } else {
+        setStep('preview');
+      }
+    }
+  };
+
+  const generateAutoSchedule = async () => {
+    setLoading(true);
+    try {
+      const data = await api.autoSchedule({
+        scheduled_date: selectedDate,
+        task_ids: selectedTasks,
+        habit_ids: selectedHabits,
+        start_time: scheduleTime.start,
+        end_time: scheduleTime.end,
+        slot_duration: 30
+      });
+      setSuggestions((data as any).suggestions || []);
+      setStep('preview');
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const handleConfirm = () => {
+    const items = [
+      ...selectedTasks.map(id => ({ item_type: 'task', item_id: id, scheduled_date: selectedDate, duration_minutes: 30 })),
+      ...selectedHabits.map(id => ({ item_type: 'habit', item_id: id, scheduled_date: selectedDate, duration_minutes: 15 }))
+    ];
+    
+    if (autoSchedule && suggestions.length > 0) {
+      items.forEach((item, i) => {
+        if (suggestions[i]) {
+          item.scheduled_time = suggestions[i].scheduled_time;
+          item.duration_minutes = suggestions[i].duration_minutes;
+        }
+      });
+    }
+    
+    onConfirm(items, selectedDate);
+    onClose();
+    // Reset
+    setStep('select-date');
+    setSelectedTasks([]);
+    setSelectedHabits([]);
+    setSuggestions([]);
+  };
+
+  const toggleTask = (id: number) => {
+    setSelectedTasks(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
+  };
+
+  const toggleHabit = (id: number) => {
+    setSelectedHabits(prev => prev.includes(id) ? prev.filter(h => h !== id) : [...prev, id]);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-[#161b22] border border-[#30363d] rounded-[20px] w-[600px] max-h-[80vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-[#30363d]">
+          <h3 className="text-[20px] font-bold text-[#e6edf3]">Plan Your Day</h3>
+          <button onClick={onClose} className="text-[#8b949e] hover:text-[#e6edf3]">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto max-h-[60vh]">
+          {step === 'select-date' && (
+            <div className="space-y-4">
+              <p className="text-[#8b949e] text-[14px]">Which day do you want to plan?</p>
+              <div className="grid grid-cols-3 gap-3">
+                {dateOptions.map(opt => (
+                  <button
+                    key={opt.label}
+                    onClick={() => handleDateSelect(opt.date)}
+                    className={`p-4 rounded-[12px] border text-[14px] font-medium transition-all ${
+                      selectedDate === opt.date || (opt.date === 'custom' && !dateOptions.find(d => d.date === selectedDate))
+                        ? 'bg-[#7c79ff] border-[#7c79ff] text-white'
+                        : 'bg-[#0d1117] border-[#30363d] text-[#8b949e] hover:border-[#7c79ff]'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="w-full bg-[#0d1117] text-[#dae2fd] px-4 py-3 rounded-[12px] border border-[#30363d] focus:border-[#7d79ff] focus:ring-1 focus:ring-[#7d79ff] outline-none transition-all text-[14px]"
+              />
+            </div>
+          )}
+
+          {step === 'select-items' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <p className="text-[#8b949e] text-[14px]">
+                  {format(new Date(selectedDate), 'EEEE, MMM d')}
+                </p>
+                <label className="flex items-center gap-2 text-[14px] text-[#8b949e] cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={autoSchedule} 
+                    onChange={(e) => setAutoSchedule(e.target.checked)}
+                    className="w-4 h-4 rounded border-[#30363d] bg-[#0d1117] accent-[#7d79ff] cursor-pointer"
+                  />
+                  Auto-schedule
+                </label>
+              </div>
+
+              {autoSchedule && (
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="text-[11px] text-[#8b949e] uppercase tracking-wider">Start</label>
+                    <input 
+                      type="time" 
+                      value={scheduleTime.start}
+                      onChange={(e) => setScheduleTime({...scheduleTime, start: e.target.value})}
+                      className="w-full bg-[#0d1117] text-[#dae2fd] px-3 py-2 rounded-[8px] border border-[#ffffff0a] focus:border-[#7d79ff] focus:ring-1 focus:ring-[#7d79ff] outline-none transition-all text-[14px]"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[11px] text-[#8b949e] uppercase tracking-wider">End</label>
+                    <input 
+                      type="time" 
+                      value={scheduleTime.end}
+                      onChange={(e) => setScheduleTime({...scheduleTime, end: e.target.value})}
+                      className="w-full bg-[#0d1117] text-[#dae2fd] px-3 py-2 rounded-[8px] border border-[#ffffff0a] focus:border-[#7d79ff] focus:ring-1 focus:ring-[#7d79ff] outline-none transition-all text-[14px]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <div className="w-8 h-8 border-2 border-[#7c79ff]/20 border-t-[#7c79ff] rounded-full animate-spin" />
+                </div>
+              ) : (
+                <>
+                  {/* Tasks */}
+                  {(unscheduledItems.tasks as any[])?.length > 0 && (
+                    <div>
+                      <p className="text-[12px] text-[#8b949e] uppercase tracking-wider mb-3">Tasks</p>
+                      <div className="space-y-2">
+                        {(unscheduledItems.tasks as any[]).map((task: any) => (
+                          <div 
+                            key={task.id}
+                            onClick={() => toggleTask(task.id)}
+                            className={`flex items-center gap-3 p-3 rounded-[10px] border cursor-pointer transition-all ${
+                              selectedTasks.includes(task.id)
+                                ? 'bg-[#7c79ff]/10 border-[#7c79ff]'
+                                : 'bg-[#0d1117] border-[#30363d] hover:border-[#7c79ff]'
+                            }`}
+                          >
+                            <div className={`w-4 h-4 rounded border ${
+                              selectedTasks.includes(task.id) ? 'bg-[#7c79ff] border-[#7c79ff]' : 'border-[#8b949e]'
+                            }`} />
+                            <div className="flex-1">
+                              <p className="text-[#e6edf3] text-[14px]">{task.title}</p>
+                              <p className="text-[#8b949e] text-[11px]">{task.priority} priority</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Habits */}
+                  {(unscheduledItems.habits as any[])?.length > 0 && (
+                    <div>
+                      <p className="text-[12px] text-[#8b949e] uppercase tracking-wider mb-3">Daily Habits</p>
+                      <div className="space-y-2">
+                        {(unscheduledItems.habits as any[]).map((habit: any) => (
+                          <div 
+                            key={habit.id}
+                            onClick={() => toggleHabit(habit.id)}
+                            className={`flex items-center gap-3 p-3 rounded-[10px] border cursor-pointer transition-all ${
+                              selectedHabits.includes(habit.id)
+                                ? 'bg-[#39d353]/10 border-[#39d353]'
+                                : 'bg-[#0d1117] border-[#30363d] hover:border-[#39d353]'
+                            }`}
+                          >
+                            <div className={`w-4 h-4 rounded border ${
+                              selectedHabits.includes(habit.id) ? 'bg-[#39d353] border-[#39d353]' : 'border-[#8b949e]'
+                            }`} />
+                            <div className="flex-1">
+                              <p className="text-[#e6edf3] text-[14px]">{habit.name}</p>
+                              <p className="text-[#8b949e] text-[11px]">{habit.frequency}</p>
+                            </div>
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: habit.color || '#39d353' }} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {((unscheduledItems.tasks as any[])?.length === 0 && (unscheduledItems.habits as any[])?.length === 0) && (
+                    <p className="text-center text-[#8b949e] py-4">No unscheduled items for this day</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {step === 'preview' && (
+            <div className="space-y-4">
+              <p className="text-[#8b949e] text-[14px]">
+                Schedule Preview - {format(new Date(selectedDate), 'EEEE, MMM d')}
+              </p>
+
+              {/* Preview Items */}
+              <div className="space-y-2">
+                {(autoSchedule ? suggestions : [
+                  ...selectedTasks.map(id => {
+                    const task = (unscheduledItems.tasks as any[])?.find((t: any) => t.id === id);
+                    return task ? { type: 'task', ...task } : null;
+                  }),
+                  ...selectedHabits.map(id => {
+                    const habit = (unscheduledItems.habits as any[])?.find((h: any) => h.id === id);
+                    return habit ? { type: 'habit', ...habit } : null;
+                  })
+                ]).filter(Boolean).map((item: any, i: number) => (
+                  <div key={i} className="flex items-center gap-3 p-3 bg-[#0d1117] rounded-[10px] border border-[#30363d]">
+                    <div className={`w-2 h-2 rounded-full ${item.type === 'task' ? 'bg-[#58a6ff]' : 'bg-[#39d353]'}`} />
+                    <span className="text-[#8b949e] text-[12px] w-16">
+                      {item.scheduled_time || 'No time'}
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-[#e6edf3] text-[14px]">{item.title}</p>
+                      <p className="text-[#8b949e] text-[11px]">{item.duration_minutes || 30} min</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {((autoSchedule ? suggestions : []).length === 0 && selectedTasks.length === 0 && selectedHabits.length === 0) && (
+                <p className="text-center text-[#8b949e] py-4">No items selected</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-between p-6 border-t border-[#30363d]">
+          {step === 'select-items' && (
+            <button 
+              onClick={() => setStep('select-date')}
+              className="text-[#8b949e] text-[14px] font-medium"
+            >
+              Back
+            </button>
+          )}
+          {step === 'preview' && (
+            <button 
+              onClick={() => setStep(autoSchedule ? 'select-items' : 'select-items')}
+              className="text-[#8b949e] text-[14px] font-medium"
+            >
+              Back
+            </button>
+          )}
+          {step === 'select-date' && <div />}
+
+          {step !== 'select-date' && (
+            <button 
+              onClick={step === 'preview' ? handleConfirm : handleNext}
+              disabled={(selectedTasks.length === 0 && selectedHabits.length === 0) || loading}
+              className="bg-[#7c79ff] hover:bg-[#6d69f0] disabled:opacity-50 text-white px-6 py-2 rounded-[10px] font-medium"
+            >
+              {step === 'preview' ? 'Confirm Schedule' : 'Next'}
+            </button>
+          )}
+          {step === 'select-date' && (
+            <button 
+              onClick={handleNext}
+              className="bg-[#7c79ff] hover:bg-[#6d69f0] text-white px-6 py-2 rounded-[10px] font-medium"
+            >
+              Next
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Calendar() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(startOfToday());
@@ -34,12 +376,31 @@ export default function Calendar() {
   const [view, setView] = useState<'day' | 'week' | 'month'>('month');
   const [upcomingTasks, setUpcomingTasks] = useState<any[]>([]);
   const [calendarStats, setCalendarStats] = useState<any>(null);
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [scheduledItems, setScheduledItems] = useState<any[]>([]);
 
   useEffect(() => {
     fetchCalendarData();
     fetchUpcomingTasks();
     fetchCalendarStats();
+    fetchScheduledItems();
   }, [currentMonth]);
+
+  const fetchScheduledItems = async () => {
+    try {
+      const start = format(startOfWeek(startOfMonth(currentMonth)), 'yyyy-MM-dd');
+      const end = format(endOfWeek(endOfMonth(currentMonth)), 'yyyy-MM-dd');
+      const data = await api.getScheduledItems(start, end);
+      setScheduledItems(data as any[]);
+    } catch (e) { console.error(e); }
+  };
+
+  const handlePlanConfirm = async (items: any[], date: string) => {
+    try {
+      await api.confirmScheduledItems(items);
+      fetchScheduledItems();
+    } catch (e) { console.error(e); }
+  };
 
   const fetchCalendarData = async () => {
     try {
@@ -174,6 +535,16 @@ export default function Calendar() {
         {allDays.map((d, i) => {
           const formattedDate = format(d, 'yyyy-MM-dd');
           const dayEvents = events.filter(e => e.date === formattedDate);
+          const dayScheduled = scheduledItems.filter(s => s.scheduled_date === formattedDate && s.is_confirmed).map(s => ({
+            id: s.id,
+            type: s.item_type,
+            title: s.title,
+            date: s.scheduled_date,
+            is_completed: false,
+            scheduled_time: s.scheduled_time,
+            priority: 'scheduled'
+          }));
+          const allDayEvents = [...dayEvents, ...dayScheduled];
           const isCurrentMonth = isSameMonth(d, monthStart);
           const isSelected = isSameDay(d, selectedDate);
           const isTodayDate = isToday(d);
@@ -194,24 +565,27 @@ export default function Calendar() {
                 }`}>
                   {format(d, 'd')}
                 </span>
-                {dayEvents.length > 0 && (
+                {allDayEvents.length > 0 && (
                   <span className="text-[10px] font-bold text-[#8b949e] bg-[#21262d] px-1.5 py-0.5 rounded-[4px] opacity-0 group-hover:opacity-100 transition-opacity">
-                    {dayEvents.length}
+                    {allDayEvents.length}
                   </span>
                 )}
               </div>
               <div className="space-y-1 overflow-hidden">
-                {dayEvents.slice(0, 3).map((event, idx) => (
+                {allDayEvents.slice(0, 3).map((event, idx) => (
                   <div 
                     key={idx} 
                     className={`text-[10px] px-2 py-1 rounded-[4px] truncate flex items-center gap-1.5 ${
-                      event.type === 'habit' 
-                        ? 'bg-[#2ea043]/10 text-[#39d353] border border-[#2ea043]/20' 
-                        : 'bg-[#58a6ff]/10 text-[#58a6ff] border border-[#58a6ff]/20'
+                      event.priority === 'scheduled'
+                        ? 'bg-[#f85149]/10 text-[#f85149] border border-[#f85149]/20'
+                        : event.type === 'habit' 
+                          ? 'bg-[#2ea043]/10 text-[#39d353] border border-[#2ea043]/20' 
+                          : 'bg-[#58a6ff]/10 text-[#58a6ff] border border-[#58a6ff]/20'
                     }`}
                   >
-                    <div className={`w-1.5 h-1.5 rounded-full ${event.type === 'habit' ? 'bg-[#39d353]' : 'bg-[#58a6ff]'}`} />
+                    <div className={`w-1.5 h-1.5 rounded-full ${event.priority === 'scheduled' ? 'bg-[#f85149]' : event.type === 'habit' ? 'bg-[#39d353]' : 'bg-[#58a6ff]'}`} />
                     {event.title}
+                    {event.scheduled_time && <span className="opacity-70 ml-1">{event.scheduled_time}</span>}
                   </div>
                 ))}
                 {dayEvents.length > 3 && (
@@ -278,14 +652,24 @@ export default function Calendar() {
         </div>
 
         <div className="p-6">
-          <button className="w-full bg-[#2d3449] hover:bg-[#3b434b] text-[#e6edf3] font-medium py-3 rounded-[8px] flex items-center justify-center gap-2 transition-all active:scale-95 text-[14px]">
-            <CalendarIcon className="w-4 h-4" />
-            <span>Plan Tomorrow</span>
+          <button 
+            onClick={() => setShowPlanModal(true)}
+            className="w-full bg-[#2d3449] hover:bg-[#3b434b] text-[#e6edf3] font-medium py-3 rounded-[8px] flex items-center justify-center gap-2 transition-all active:scale-95 text-[14px]"
+          >
+            <CalendarIcon className="w-4 h-4 text-[#7d79ff]" />
+            <span>Plan Now</span>
           </button>
         </div>
       </div>
     );
   };
+
+  // Insert modal before final return
+  const planningModal = <PlanNowModal 
+    isOpen={showPlanModal} 
+    onClose={() => setShowPlanModal(false)} 
+    onConfirm={handlePlanConfirm}
+  />;
 
   if (loading && events.length === 0) {
     return (
@@ -339,8 +723,9 @@ export default function Calendar() {
               </div>
            </div>
         </div>
-      </div>
+       </div>
       {renderSidebar()}
+      {planningModal}
     </div>
   );
 }

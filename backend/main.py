@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, HTTPException, Depends, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import jwt
 import bcrypt
 import os
@@ -12,6 +12,7 @@ from models.user import User
 from models.habit import Habit
 from models.task import Task
 from models.goal import Goal
+from models.scheduled_item import ScheduledItem
 from db.connection import execute_query
 
 load_dotenv()
@@ -134,7 +135,11 @@ async def login(data: UserLogin):
         'user': {
             'id': user['id'],
             'email': user['email'],
-            'full_name': user['full_name']
+            'full_name': user['full_name'],
+            'avatar_url': user.get('avatar_url'),
+            'rank': user.get('rank'),
+            'timezone': user.get('timezone'),
+            'status': user.get('status')
         }
     }
 
@@ -692,13 +697,13 @@ async def global_search(q: str = Query("", min_length=0), user_id: int = Depends
     }
 
 def calculate_user_rank(completed_tasks: int) -> str:
-    """Calculate architect rank based on completed task nodes"""
-    if completed_tasks >= 500: return "Nexus Prime Architect"
-    if completed_tasks >= 250: return "Master System Designer"
-    if completed_tasks >= 100: return "Senior Architect"
-    if completed_tasks >= 50: return "Disciplined Architect"
-    if completed_tasks >= 10: return "Initiate Architect"
-    return "Novice Architect"
+    """Calculate user rank based on completed tasks"""
+    if completed_tasks >= 500: return "Expert"
+    if completed_tasks >= 250: return "Advanced"
+    if completed_tasks >= 100: return "Intermediate"
+    if completed_tasks >= 50: return "Intermediate"
+    if completed_tasks >= 10: return "Beginner"
+    return "New User"
 
 @app.get("/api/profile")
 async def get_profile(user_id: int = Depends(get_current_user_id)):
@@ -706,15 +711,25 @@ async def get_profile(user_id: int = Depends(get_current_user_id)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Convert RealDictCursor to dict and ensure it's JSON-serializable
+    user_dict = dict(user) if user else {}
+    
     # Update rank dynamically on fetch
     summary = await get_analytics_summary(user_id)
     new_rank = calculate_user_rank(summary['completed_tasks'])
     
-    if user.get('rank') != new_rank:
-        User.update(user_id, rank=new_rank)
-        user['rank'] = new_rank
-        
-    return user
+    if user_dict.get('rank') != new_rank:
+        updated_user = User.update(user_id, rank=new_rank)
+        if updated_user:
+            user_dict = dict(updated_user)
+    
+    # Convert datetime to ISO format if present
+    if 'created_at' in user_dict and user_dict['created_at']:
+        user_dict['created_at'] = user_dict['created_at'].isoformat() if hasattr(user_dict['created_at'], 'isoformat') else str(user_dict['created_at'])
+    if 'updated_at' in user_dict and user_dict['updated_at']:
+        user_dict['updated_at'] = user_dict['updated_at'].isoformat() if hasattr(user_dict['updated_at'], 'isoformat') else str(user_dict['updated_at'])
+            
+    return user_dict
 
 @app.put("/api/profile")
 async def update_profile(data: dict, user_id: int = Depends(get_current_user_id)):
@@ -725,14 +740,25 @@ async def update_profile(data: dict, user_id: int = Depends(get_current_user_id)
         user = User.update(user_id, **update_data)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+        
+        # Convert to dict for JSON serialization
+        user_dict = dict(user) if user else {}
             
         # Also sync rank in case progress stats changed (unlikely here but good for consistency)
         summary = await get_analytics_summary(user_id)
         new_rank = calculate_user_rank(summary['completed_tasks'])
-        if user.get('rank') != new_rank:
-            user = User.update(user_id, rank=new_rank)
+        if user_dict.get('rank') != new_rank:
+            updated_user = User.update(user_id, rank=new_rank)
+            if updated_user:
+                user_dict = dict(updated_user)
 
-        return user
+        # Convert datetime to ISO format if present
+        if 'created_at' in user_dict and user_dict['created_at']:
+            user_dict['created_at'] = user_dict['created_at'].isoformat() if hasattr(user_dict['created_at'], 'isoformat') else str(user_dict['created_at'])
+        if 'updated_at' in user_dict and user_dict['updated_at']:
+            user_dict['updated_at'] = user_dict['updated_at'].isoformat() if hasattr(user_dict['updated_at'], 'isoformat') else str(user_dict['updated_at'])
+        
+        return user_dict
     except Exception as e:
         print(f"Update error: {e}")
         # If it's a unique constraint error for email
@@ -805,6 +831,219 @@ async def get_achievements(user_id: int = Depends(get_current_user_id)):
     """, (user_id,))
     
     return user_ach
+
+# --- Planning / Schedule Endpoints ---
+
+class ScheduleItemCreate(BaseModel):
+    item_type: str  # 'task' or 'habit'
+    item_id: int
+    scheduled_date: str
+    scheduled_time: Optional[str] = None
+    duration_minutes: int = 30
+
+class AutoScheduleRequest(BaseModel):
+    scheduled_date: str
+    task_ids: List[int] = []
+    habit_ids: List[int] = []
+    start_time: str = "09:00"
+    end_time: str = "18:00"
+    slot_duration: int = 30
+
+@app.get("/api/planning/unscheduled-tasks")
+async def get_unscheduled_tasks(
+    scheduled_date: Optional[str] = None,
+    user_id: int = Depends(get_current_user_id)
+):
+    """Get all unscheduled tasks for planning"""
+    if not scheduled_date:
+        scheduled_date = datetime.now().date().isoformat()
+    
+    # Get tasks that are not completed and not already scheduled for the given date
+    query = """
+        SELECT id, title, description, priority, due_date 
+        FROM tasks 
+        WHERE user_id = %s AND is_completed = false
+        AND id NOT IN (
+            SELECT item_id FROM scheduled_items 
+            WHERE user_id = %s AND item_type = 'task' AND scheduled_date = %s AND is_confirmed = true
+        )
+        ORDER BY priority DESC, due_date ASC NULLS LAST
+    """
+    tasks = execute_query(query, (user_id, user_id, scheduled_date)) or []
+    
+    # Get habits (daily habits can be scheduled)
+    habits_query = """
+        SELECT id, name, description, frequency, color
+        FROM habits
+        WHERE user_id = %s AND is_active = true AND frequency = 'daily'
+        AND id NOT IN (
+            SELECT item_id FROM scheduled_items 
+            WHERE user_id = %s AND item_type = 'habit' AND scheduled_date = %s AND is_confirmed = true
+        )
+    """
+    habits = execute_query(habits_query, (user_id, user_id, scheduled_date)) or []
+    
+    return {
+        'tasks': tasks,
+        'habits': habits
+    }
+
+@app.post("/api/planning/schedule-item")
+async def schedule_single_item(
+    data: ScheduleItemCreate,
+    user_id: int = Depends(get_current_user_id)
+):
+    """Schedule a single item (draft - not confirmed)"""
+    # Check if already scheduled
+    existing = ScheduledItem.is_item_scheduled(user_id, data.item_type, data.item_id, data.scheduled_date)
+    if existing:
+        raise HTTPException(status_code=400, detail="Item already scheduled for this date")
+    
+    scheduled = ScheduledItem.create(
+        user_id=user_id,
+        item_type=data.item_type,
+        item_id=data.item_id,
+        scheduled_date=data.scheduled_date,
+        scheduled_time=data.scheduled_time,
+        duration_minutes=data.duration_minutes
+    )
+    return scheduled
+
+@app.post("/api/planning/auto-schedule")
+async def auto_schedule(
+    data: AutoScheduleRequest,
+    user_id: int = Depends(get_current_user_id)
+):
+    """Generate auto-schedule suggestions (not saved yet)"""
+    # Parse times
+    start_hour, start_min = map(int, data.start_time.split(':'))
+    end_hour, end_min = map(int, data.end_time.split(':'))
+    
+    start_minutes = start_hour * 60 + start_min
+    end_minutes = end_hour * 60 + end_min
+    
+    # Generate time slots
+    slots = []
+    current = start_minutes
+    while current + data.slot_duration <= end_minutes:
+        hour = current // 60
+        minute = current % 60
+        time_str = f"{hour:02d}:{minute:02d}"
+        slots.append(time_str)
+        current += data.slot_duration
+    
+    # Get task details
+    scheduled_items = []
+    slot_index = 0
+    
+    for task_id in data.task_ids:
+        task = Task.get_by_id(task_id, user_id)
+        if task:
+            scheduled_items.append({
+                'item_type': 'task',
+                'item_id': task_id,
+                'title': task.get('title', 'Task'),
+                'scheduled_time': slots[slot_index] if slot_index < len(slots) else None,
+                'duration_minutes': 30
+            })
+            slot_index += 1
+    
+    for habit_id in data.habit_ids:
+        habit = Habit.get_by_id(habit_id, user_id)
+        if habit:
+            scheduled_items.append({
+                'item_type': 'habit',
+                'item_id': habit_id,
+                'title': habit.get('name', 'Habit'),
+                'scheduled_time': slots[slot_index] if slot_index < len(slots) else None,
+                'duration_minutes': 15
+            })
+            slot_index += 1
+    
+    return {
+        'suggestions': scheduled_items,
+        'slots': slots
+    }
+
+@app.post("/api/planning/confirm")
+async def confirm_scheduled_items(
+    scheduled_items: List[dict],
+    user_id: int = Depends(get_current_user_id)
+):
+    """Save and confirm scheduled items"""
+    confirmed = []
+    for item in scheduled_items:
+        # First create as draft if not exists
+        existing = ScheduledItem.is_item_scheduled(
+            user_id, 
+            item['item_type'], 
+            item['item_id'], 
+            item['scheduled_date']
+        )
+        if not existing:
+            scheduled = ScheduledItem.create(
+                user_id=user_id,
+                item_type=item['item_type'],
+                item_id=item['item_id'],
+                scheduled_date=item['scheduled_date'],
+                scheduled_time=item.get('scheduled_time'),
+                duration_minutes=item.get('duration_minutes', 30)
+            )
+            if scheduled:
+                confirmed_item = ScheduledItem.confirm(scheduled['id'], user_id)
+                confirmed.append(confirmed_item)
+        else:
+            # Already exists, just confirm it
+            confirmed_item = ScheduledItem.confirm(existing['id'], user_id)
+            if confirmed_item:
+                confirmed.append(confirmed_item)
+    
+    return {'confirmed': confirmed}
+
+@app.get("/api/planning/scheduled")
+async def get_scheduled_items(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    user_id: int = Depends(get_current_user_id)
+):
+    """Get all confirmed scheduled items"""
+    if not start_date:
+        start_date = (datetime.now().date() - timedelta(days=7)).isoformat()
+    if not end_date:
+        end_date = (datetime.now().date() + timedelta(days=30)).isoformat()
+    
+    items = ScheduledItem.get_by_date_range(user_id, start_date, end_date)
+    
+    # Enrich with item details
+    enriched = []
+    for item in items:
+        if item['item_type'] == 'task':
+            task = Task.get_by_id(item['item_id'], user_id)
+            item['title'] = task['title'] if task else 'Unknown Task'
+            item['description'] = task.get('description', '') if task else ''
+        elif item['item_type'] == 'habit':
+            habit = Habit.get_by_id(item['item_id'], user_id)
+            item['title'] = habit['name'] if habit else 'Unknown Habit'
+            item['description'] = habit.get('description', '') if habit else ''
+            item['color'] = habit.get('color', '#39d353') if habit else '#39d353'
+        enriched.append(item)
+    
+    return enriched
+
+@app.delete("/api/planning/item/{item_id}")
+async def delete_scheduled_item(
+    item_id: int,
+    user_id: int = Depends(get_current_user_id)
+):
+    """Delete a scheduled item"""
+    ScheduledItem.delete(item_id, user_id)
+    return {'message': 'Deleted'}
+
+@app.post("/api/planning/clear-drafts")
+async def clear_drafts(user_id: int = Depends(get_current_user_id)):
+    """Clear all unconfirmed draft scheduled items"""
+    ScheduledItem.delete_drafts(user_id)
+    return {'message': 'Drafts cleared'}
 
 if __name__ == "__main__":
     import uvicorn

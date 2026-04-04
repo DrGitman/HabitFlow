@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255),
     avatar_url TEXT,
+    rank VARCHAR(50) DEFAULT 'Beginner',
+    timezone VARCHAR(50) DEFAULT 'UTC',
+    status VARCHAR(50) DEFAULT 'Active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -59,6 +62,22 @@ CREATE TABLE IF NOT EXISTS goals (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Scheduled items table (for Plan Now feature)
+CREATE TABLE IF NOT EXISTS scheduled_items (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    item_type VARCHAR(20) NOT NULL, -- 'task' or 'habit'
+    item_id INTEGER NOT NULL, -- references task_id or habit_id
+    scheduled_date DATE NOT NULL,
+    scheduled_time TIME,
+    duration_minutes INTEGER DEFAULT 30,
+    is_confirmed BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(item_type, item_id, scheduled_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_scheduled_items_user_date ON scheduled_items(user_id, scheduled_date);
 
 -- Habit completions table
 CREATE TABLE IF NOT EXISTS habit_completions (

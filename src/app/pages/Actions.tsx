@@ -20,15 +20,24 @@ export default function Actions() {
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    const action = searchParams.get('action');
+    const newType = searchParams.get('new');
     
     if (tab === 'tasks' || tab === 'goals' || tab === 'habits') {
       setActiveTab(tab);
     }
     
-    if (action === 'new') {
+    // Handle quick add from navigation
+    if (newType === 'task') {
+      setActiveTab('tasks');
       setForceNew(true);
-      // Clear the URL param after reading
+      window.history.replaceState(null, '', '/actions');
+    } else if (newType === 'goal') {
+      setActiveTab('goals');
+      setForceNew(true);
+      window.history.replaceState(null, '', '/actions');
+    } else if (newType === 'habit') {
+      setActiveTab('habits');
+      setForceNew(true);
       window.history.replaceState(null, '', '/actions');
     }
   }, [searchParams]);

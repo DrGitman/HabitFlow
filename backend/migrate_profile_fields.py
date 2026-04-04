@@ -13,9 +13,9 @@ def migrate():
         
         # Add columns if they don't exist
         queries = [
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS rank VARCHAR(50) DEFAULT 'Novice Architect';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS rank VARCHAR(50) DEFAULT 'Beginner';",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT 'UTC';",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(100) DEFAULT 'Focusing';"
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(100) DEFAULT 'Active';"
         ]
         
         for query in queries:
