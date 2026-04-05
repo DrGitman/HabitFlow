@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS habits (
     target_count INTEGER DEFAULT 1,
     color VARCHAR(20),
     icon VARCHAR(50),
+    days_of_week INTEGER[] DEFAULT '{0,1,2,3,4,5,6}', -- 0=Monday, 6=Sunday
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -56,6 +57,8 @@ CREATE TABLE IF NOT EXISTS goals (
     priority VARCHAR(20) DEFAULT 'medium', -- low, medium, high
     deadline DATE,
     is_completed BOOLEAN DEFAULT false,
+    current_value FLOAT DEFAULT 0,
+    target_value FLOAT DEFAULT 100,
     completed_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -188,3 +191,16 @@ CREATE TABLE IF NOT EXISTS goal_habits (
 
 CREATE INDEX IF NOT EXISTS idx_goal_habits_goal_id ON goal_habits(goal_id);
 CREATE INDEX IF NOT EXISTS idx_goal_habits_habit_id ON goal_habits(habit_id);
+
+-- User Preferences table
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    dark_mode BOOLEAN DEFAULT true,
+    desktop_notifications BOOLEAN DEFAULT true,
+    weekly_summary_emails BOOLEAN DEFAULT true,
+    notification_reminders BOOLEAN DEFAULT true,
+    notification_achievements BOOLEAN DEFAULT true,
+    privacy_show_rank BOOLEAN DEFAULT true,
+    privacy_share_stats BOOLEAN DEFAULT false,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

@@ -150,9 +150,9 @@ function MiniHeatmap({ completions }: { completions: HabitCompletion[] }) {
 
   // Get last 14 days
   const cells = Array.from({ length: 14 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (13 - i));
-    const dateStr = date.toISOString().split('T')[0];
+    const d = new Date();
+    d.setDate(d.getDate() - (13 - i));
+    const dateStr = d.toLocaleDateString('sv-SE');
     const count = completionMap.get(dateStr) || 0;
     
     if (count === 0) return '#6b2737';
@@ -411,21 +411,50 @@ function GoalLinkDropdown({
   );
 }
 
-export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
-  const [tasks,       setTasks]       = useState<Task[]>([]);
-  const [completions, setCompletions] = useState<HabitCompletion[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [filter,      setFilter]      = useState<Filter>('all');
-  const [showForm,    setShowForm]    = useState(false);
+interface TasksProps {
+  forceNew?: boolean;
+  onFormOpened?: () => void;
+  highlightId?: number | null;
+  onHighlightReset?: () => void;
+}
+
+export default function Tasks({ forceNew, onFormOpened, highlightId, onHighlightReset }: TasksProps) {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [habitCompletions, setHabitCompletions] = useState<HabitCompletion[]>([]);
+  const highlightedRef = useRef<HTMLDivElement>(null);
+
+  // New: Handle highlighting and scrolling
+  useEffect(() => {
+    if (highlightId && !loading && tasks.length > 0) {
+      const element = document.getElementById(`task-${highlightId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Auto-reset highlight after 3 seconds
+        const timer = setTimeout(() => {
+          onHighlightReset?.();
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [highlightId, loading, tasks]);
+
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    priority: 'medium' as 'low' | 'medium' | 'high',
+    category: 'Personal',
+    due_date: new Date().toISOString().split('T')[0],
+  });
   const [goals, setGoals] = useState<Array<{ id: number; title: string }>>([]);
   const [linkDropdownOpen, setLinkDropdownOpen] = useState(false);
   const [linkingTaskId, setLinkingTaskId] = useState<number | null>(null);
   const [currentTaskGoalId, setCurrentTaskGoalId] = useState<number | null>(null);
   const linkButtonRef = useRef<HTMLButtonElement>(null);
-  const [formData,    setFormData]    = useState({
-    title: '', description: '', category: 'Personal', priority: 'medium' as Task['priority'], due_date: '',
-  });
 
   const fetchTasks = async () => {
     try {
@@ -440,7 +469,7 @@ export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
           completion_date: new Date(t.created_at).toISOString().split('T')[0],
           count: 1,
         }));
-      setCompletions(completionData);
+      setHabitCompletions(completionData);
 
       // Fetch goals for linking
       try {
@@ -467,7 +496,11 @@ export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
   }, [forceNew]);
 
   const handleComplete = async (id: number, done: boolean) => {
-    try { await api.completeTask(id, !done); fetchTasks(); } catch (e) { console.error(e); }
+    try { 
+      const date = new Date().toLocaleDateString('sv-SE');
+      await api.completeTask(id, !done, date); 
+      fetchTasks(); 
+    } catch (e) { console.error(e); }
   };
   const handleDelete = async (id: number) => {
     if (confirm('Delete this task?')) { try { await api.deleteTask(id); fetchTasks(); } catch (e) { console.error(e); } }
@@ -479,6 +512,18 @@ export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
   };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Future Only Validation
+    if (formData.due_date) {
+      const selected = new Date(formData.due_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selected < today) {
+        alert("Deadline cannot be in the past.");
+        return;
+      }
+    }
+
     try {
       if (editingTask) await api.updateTask(editingTask.id, formData);
       else await api.createTask(formData);
@@ -562,7 +607,10 @@ export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
             return (
               <div
                 key={task.id}
-                className="group bg-[#171f33] border border-[#ffffff08] hover:border-[#ffffff15] rounded-[12px] px-5 py-4 flex items-center gap-4 transition-all"
+                id={`task-${task.id}`}
+                className={`group bg-[#171f33] border border-[#ffffff08] hover:border-[#ffffff15] rounded-[12px] px-5 py-4 flex items-center gap-4 transition-all ${
+                  highlightId === task.id ? 'ring-2 ring-[#7c79ff] shadow-[0_0_20px_rgba(124,121,255,0.3)] bg-[#1c2540]' : ''
+                }`}
               >
                 {/* Checkbox */}
                 <button
@@ -716,6 +764,7 @@ export default function Tasks({ forceNew, onFormOpened }: TasksProps) {
                     <label className="text-[10px] font-bold uppercase tracking-widest text-[#8b949e] block mb-1">Due Date</label>
                     <input
                       type="date" value={formData.due_date}
+                      min={new Date().toLocaleDateString('sv-SE')}
                       onChange={e => setFormData({ ...formData, due_date: e.target.value })}
                       className="w-full bg-[#0d1117] text-[#dae2fd] px-3 py-2.5 rounded-[8px] border border-[#ffffff0a] focus:border-[#7c79ff] focus:outline-none text-[12px] transition-all"
                       style={{

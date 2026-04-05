@@ -11,6 +11,8 @@ import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import { Toaster } from './components/ui/sonner';
+import { RealTimeNotifications } from './components/RealTimeNotifications';
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -125,10 +127,12 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
+    <AuthProvider>
+      <BrowserRouter>
         <AppRoutes />
-      </AuthProvider>
-    </BrowserRouter>
+        <RealTimeNotifications />
+        <Toaster position="top-right" expand={false} richColors />
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

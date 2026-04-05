@@ -49,18 +49,20 @@ class Task:
         query = f"UPDATE tasks SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE id = %s AND user_id = %s RETURNING *"
         return execute_query(query, tuple(values), fetch_one=True)
 
-    @staticmethod
-    def mark_complete(task_id, user_id, is_completed=True):
-        """Mark task as complete/incomplete"""
-        completed_at = datetime.now() if is_completed else None
-        query = "UPDATE tasks SET is_completed = %s, completed_at = %s WHERE id = %s AND user_id = %s RETURNING *"
-        return execute_query(query, (is_completed, completed_at, task_id, user_id), fetch_one=True)
 
     @staticmethod
     def delete(task_id, user_id):
         """Delete task"""
         query = "DELETE FROM tasks WHERE id = %s AND user_id = %s"
         return execute_query(query, (task_id, user_id), fetch_all=False)
+
+    @staticmethod
+    def mark_complete(task_id, user_id, is_completed=True, completed_at=None):
+        """Mark task as complete"""
+        if not completed_at:
+            completed_at = datetime.now()
+            
+        return Task.update(task_id, user_id, is_completed=is_completed, completed_at=completed_at)
 
     @staticmethod
     def get_by_date_range(user_id, start_date, end_date):

@@ -12,8 +12,9 @@ from models.user import User
 from models.habit import Habit
 from models.task import Task
 from models.goal import Goal
-from models.scheduled_item import ScheduledItem
 from models.focus_session import FocusSession
+from models.scheduled_item import ScheduledItem
+from models.notification import Notification
 from db.connection import execute_query
 
 load_dotenv()
@@ -23,7 +24,7 @@ app = FastAPI(title="Habit Tracker API")
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,6 +52,7 @@ class HabitCreate(BaseModel):
     target_count: int = 1
     color: Optional[str] = None
     icon: Optional[str] = None
+    days_of_week: Optional[List[int]] = None
 
 class HabitComplete(BaseModel):
     date: Optional[str] = None
@@ -152,8 +154,8 @@ async def login(data: UserLogin):
 # --- Habits ---
 
 @app.get("/api/habits")
-async def get_habits(user_id: int = Depends(get_current_user_id)):
-    return Habit.get_all(user_id)
+async def get_habits(date: Optional[str] = None, user_id: int = Depends(get_current_user_id)):
+    return Habit.get_all(user_id, today_date=date)
 
 @app.post("/api/habits", status_code=status.HTTP_201_CREATED)
 async def create_habit(data: HabitCreate, user_id: int = Depends(get_current_user_id)):
@@ -181,7 +183,36 @@ async def complete_habit(habit_id: int, data: HabitComplete, user_id: int = Depe
         count=data.count,
         notes=data.notes
     )
+    
+    # Trigger Notification for Habit Completion
+    Notification.create(
+        user_id=user_id,
+        type='habit_completed',
+        title='Habit Completed!',
+        message=f'Great job! You just completed one session of your habit.',
+        related_entity_type='habit',
+        related_entity_id=habit_id
+    )
+
+    # Sync achievements after completion
+    await sync_achievements(user_id)
+    
     return completion
+
+@app.delete("/api/habits/{habit_id}/complete")
+async def uncomplete_habit(habit_id: int, date: Optional[str] = None, user_id: int = Depends(get_current_user_id)):
+    Habit.unmark_complete(habit_id, user_id, date)
+    return {'message': 'Habit completion removed'}
+
+@app.get("/api/habits/{habit_id}/goals")
+async def get_habit_goals(habit_id: int, user_id: int = Depends(get_current_user_id)):
+    return Habit.get_goal_links(habit_id)
+
+@app.put("/api/habits/{habit_id}/goals")
+async def sync_habit_goals(habit_id: int, data: dict, user_id: int = Depends(get_current_user_id)):
+    goal_ids = data.get('goal_ids', [])
+    Habit.sync_goal_links(habit_id, goal_ids)
+    return {'message': 'Goals synced'}
 
 # --- Tasks ---
 
@@ -207,14 +238,33 @@ async def update_task(task_id: int, data: dict, user_id: int = Depends(get_curre
 @app.post("/api/tasks/{task_id}/complete")
 async def complete_task(task_id: int, data: dict, user_id: int = Depends(get_current_user_id)):
     is_completed = data.get('is_completed', True)
-    task = Task.mark_complete(task_id, user_id, is_completed)
+    completion_date = data.get('date')
+    task = Task.mark_complete(task_id, user_id, is_completed, completed_at=completion_date)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
         
-    # Recalculate rank after completion
-    summary = await get_analytics_summary(user_id)
-    new_rank = calculate_user_rank(summary['completed_tasks'])
-    User.update(user_id, rank=new_rank)
+    try:
+        # Recalculate rank after completion
+        summary = await get_analytics_summary(user_id)
+        new_rank = calculate_user_rank(summary.get('completed_tasks', 0))
+        User.update(user_id, rank=new_rank)
+        
+        # Trigger Notification for Task Completion
+        if is_completed:
+            Notification.create(
+                user_id=user_id,
+                type='task_completed',
+                title='Task Finished!',
+                message=f'Excellent! You reached another milestone.',
+                related_entity_type='task',
+                related_entity_id=task_id
+            )
+
+        # Sync achievements
+        await sync_achievements(user_id)
+    except Exception as e:
+        print(f"Post-completion hook error (permissions/sync): {e}")
+        # We don't fail the entire request if notifications or sync fails
     
     return task
 
@@ -316,14 +366,25 @@ async def get_linked_habits(goal_id: int, user_id: int = Depends(get_current_use
 # --- Analytics ---
 
 @app.get("/api/analytics/summary")
-async def get_analytics_summary(user_id: int = Depends(get_current_user_id)):
-    total_habits = len(Habit.get_all(user_id))
-    total_tasks = len(Task.get_all(user_id))
-    completed_tasks = len(Task.get_all(user_id, is_completed=True))
-    total_goals = len(Goal.get_all(user_id))
-    completed_goals = len(Goal.get_all(user_id, is_completed=True))
+async def get_analytics_summary(user_id: int = Depends(get_current_user_id), date: Optional[str] = None):
+    try:
+        total_habits = len(Habit.get_all(user_id, today_date=date))
+        total_tasks = len(Task.get_all(user_id))
+        completed_tasks = len(Task.get_all(user_id, is_completed=True))
+        total_goals = len(Goal.get_all(user_id))
+        completed_goals = len(Goal.get_all(user_id, is_completed=True))
+    except Exception as e:
+        print(f"Error fetching basic metrics: {e}")
+        total_habits = 0
+        total_tasks = 0
+        completed_tasks = 0
+        total_goals = 0
+        completed_goals = 0
 
-    today = datetime.now().date()
+    if not date:
+        today = datetime.now().date()
+    else:
+        today = datetime.strptime(date, '%Y-%m-%d').date()
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
     last_week_start = week_start - timedelta(days=7)
@@ -337,8 +398,14 @@ async def get_analytics_summary(user_id: int = Depends(get_current_user_id)):
     week_completions = execute_query(query, (user_id, week_start, week_end), fetch_one=True)
     last_week_completions = execute_query(query, (user_id, last_week_start, last_week_end), fetch_one=True)
 
-    habits = Habit.get_all(user_id)
-    total_habits_count = len(habits)
+    try:
+        habits = Habit.get_all(user_id)
+        total_habits_count = len(habits)
+    except Exception as e:
+        print(f"Error fetching habits list: {e}")
+        habits = []
+        total_habits_count = 0
+
     days_passed = max((today - week_start).days + 1, 1)
     total_possible = total_habits_count * days_passed
 
@@ -370,7 +437,7 @@ async def get_analytics_summary(user_id: int = Depends(get_current_user_id)):
 # --- Comprehensive Metrics (All-in-One) ---
 
 @app.get("/api/analytics/metrics")
-async def get_analytics_metrics(user_id: int = Depends(get_current_user_id)):
+async def get_analytics_metrics(user_id: int = Depends(get_current_user_id), date: Optional[str] = None):
     """
     Comprehensive metrics endpoint with all calculated values:
     - Task Metrics: total_tasks, completed_tasks, remaining_tasks, task_efficiency
@@ -382,10 +449,10 @@ async def get_analytics_metrics(user_id: int = Depends(get_current_user_id)):
     task_metrics = Task.calculate_metrics(user_id)
     
     # Habit Metrics
-    habit_metrics = Habit.calculate_all_metrics(user_id)
+    habit_metrics = Habit.calculate_all_metrics(user_id, today_date=date)
     
     # Goal Metrics
-    goal_metrics = Goal.calculate_all_metrics(user_id)
+    goal_metrics = Goal.calculate_all_metrics(user_id, today_date=date)
     
     # Calculate Habit Consistency (average across all habits)
     habits_data = habit_metrics.get('habits_data', [])
@@ -428,8 +495,11 @@ async def get_analytics_metrics(user_id: int = Depends(get_current_user_id)):
     }
 
 @app.get("/api/analytics/progress")
-async def get_analytics_progress(user_id: int = Depends(get_current_user_id)):
-    end_date = datetime.now().date()
+async def get_analytics_progress(user_id: int = Depends(get_current_user_id), date: Optional[str] = None):
+    if not date:
+        end_date = datetime.now().date()
+    else:
+        end_date = datetime.strptime(date, '%Y-%m-%d').date()
     start_date = end_date - timedelta(days=29)
 
     query = """
@@ -455,16 +525,21 @@ async def get_analytics_progress(user_id: int = Depends(get_current_user_id)):
     return progress_data
 
 @app.get("/api/analytics/streaks")
-async def get_analytics_streaks(user_id: int = Depends(get_current_user_id)):
-    habits = Habit.get_all(user_id)
+async def get_analytics_streaks(user_id: int = Depends(get_current_user_id), date: Optional[str] = None):
+    try:
+        habits = Habit.get_all(user_id, today_date=date)
+    except Exception as e:
+        print(f"Error fetching habits for streaks: {e}")
+        habits = []
     streak_data = []
     for habit in habits:
-        current_streak = Habit.calculate_streak(habit['id'], user_id)
+        current_streak = Habit.calculate_streak(habit['id'], user_id, today=date)
         streak_data.append({
             'habit_id': habit['id'],
             'habit_name': habit['name'],
             'current_streak': current_streak,
-            'color': habit['color']
+            'color': habit['color'],
+            'is_completed_today': habit.get('is_completed_today', False)
         })
     return streak_data
 
@@ -592,26 +667,22 @@ async def get_calendar_stats(user_id: int = Depends(get_current_user_id)):
 
 @app.get("/api/notifications")
 async def get_notifications(user_id: int = Depends(get_current_user_id)):
-    query = """
-        SELECT * FROM notifications
-        WHERE user_id = %s
-        ORDER BY created_at DESC
-        LIMIT 50
-    """
-    return execute_query(query, (user_id,))
+    return Notification.get_all_for_user(user_id)
+
+@app.get("/api/notifications/unread")
+async def get_unread_notifications(user_id: int = Depends(get_current_user_id)):
+    return Notification.get_unread(user_id)
 
 @app.post("/api/notifications/{notification_id}/read")
 async def mark_notification_read(notification_id: int, user_id: int = Depends(get_current_user_id)):
-    query = "UPDATE notifications SET is_read = true WHERE id = %s AND user_id = %s RETURNING *"
-    notification = execute_query(query, (notification_id, user_id), fetch_one=True)
+    notification = Notification.mark_as_read(notification_id, user_id)
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
     return notification
 
 @app.delete("/api/notifications/{notification_id}")
 async def delete_notification(notification_id: int, user_id: int = Depends(get_current_user_id)):
-    query = "DELETE FROM notifications WHERE id = %s AND user_id = %s"
-    execute_query(query, (notification_id, user_id))
+    Notification.delete(notification_id, user_id)
     return {'message': 'Notification deleted'}
 
 @app.get("/api/recent-activity")
@@ -854,39 +925,43 @@ async def update_avatar(data: dict, user_id: int = Depends(get_current_user_id))
     User.update(user_id, avatar_url=avatar_url)
     return {"avatar_url": avatar_url}
 
-@app.get("/api/profile/achievements")
-async def get_achievements(user_id: int = Depends(get_current_user_id)):
-    # Calculate dynamic achievements
-    summary = await get_analytics_summary(user_id)
-    streaks = await get_analytics_streaks(user_id)
-    
-    max_streak = 0
-    if streaks:
-        max_streak = max([s['current_streak'] for s in streaks])
-    
-    all_achievements = execute_query("SELECT * FROM achievements")
-    
-    for ach in all_achievements:
-        unlocked = False
-        ach_type = ach.get('type')
-        thresh = ach.get('threshold_value', 0)
+async def sync_achievements(user_id: int):
+    """Internal helper to evaluate and persist achievements"""
+    try:
+        summary = await get_analytics_summary(user_id)
+        # For streaks, we'll use current date for now, or could pass it if needed
+        streaks = await get_analytics_streaks(user_id)
         
-        if ach_type == 'streak':
-            if max_streak >= thresh:
-                unlocked = True
-        elif ach_type == 'task_count':
-            if summary['completed_tasks'] >= thresh:
-                unlocked = True
-        elif ach_type == 'consistency':
-            if summary['completion_rate'] >= thresh:
-                unlocked = True
-                
-        if unlocked:
-            execute_query("""
-                INSERT INTO user_achievements (user_id, achievement_id)
-                VALUES (%s, %s) ON CONFLICT (user_id, achievement_id) DO NOTHING
-            """, (user_id, ach['id']), fetch_all=False)
+        max_streak = 0
+        if streaks:
+            max_streak = max([s['current_streak'] for s in streaks])
+        
+        all_achievements = execute_query("SELECT * FROM achievements")
+        if not all_achievements:
+            return
             
+        for ach in all_achievements:
+            unlocked = False
+            ach_type = ach.get('type')
+            thresh = ach.get('threshold_value', 0)
+            
+            if ach_type == 'streak':
+                if max_streak >= thresh:
+                    unlocked = True
+            elif ach_type == 'task_count':
+                if summary['completed_tasks'] >= thresh:
+                    unlocked = True
+            elif ach_type == 'consistency':
+                if summary['completion_rate'] >= thresh:
+                    unlocked = True
+                    
+    except Exception as e:
+        print(f"Achievement sync error: {e}")
+
+@app.get("/api/profile/achievements")
+async def get_achievements_endpoint(user_id: int = Depends(get_current_user_id)):
+    await sync_achievements(user_id)
+    
     # Fetch user's unlocked achievements mapped to UI fields
     user_ach = execute_query("""
         SELECT a.name as title, a.description as desc, a.rank_type as type, a.icon, a.color

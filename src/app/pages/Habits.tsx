@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '../services/api';
-import { Check, Plus, X, Flame, Droplets, Brain, BookOpen, Dumbbell, Code2, Link2 } from 'lucide-react';
+import { Check, Plus, X, Flame, Droplets, Brain, BookOpen, Dumbbell, Code2, Link2, Circle } from 'lucide-react';
 
 interface Habit {
   id: number;
@@ -12,6 +12,9 @@ interface Habit {
   color?: string;
   icon?: string;
   created_at: string;
+  days_of_week?: number[];
+  is_completed_today?: boolean;
+  goal_ids?: number[];
 }
 
 interface ProgressData {
@@ -33,6 +36,10 @@ function getWeekDates() {
     return d.getDate();
   });
 }
+
+const getLocalDateString = (date = new Date()) => {
+  return date.toLocaleDateString('sv-SE');
+};
 
 // ── Habit icon picker ─────────────────────────────────────────────────────
 const ICON_MAP: { [k: string]: React.ElementType } = {
@@ -61,18 +68,16 @@ function pickColor(color?: string): string {
 // Build 35-cell heatmap (5 weeks × 7 days) from progress data
 function buildHeatmapColors(progress: ProgressData[]): string[] {
   const LEVELS = ['#1a1a2e', '#0e4429', '#006d32', '#26a641', '#39d353'];
-  // Build lookup by date string
   const lookup: Record<string, number> = {};
   for (const p of progress) {
     lookup[p.date] = p.count;
   }
   const today = new Date();
   const cells: string[] = [];
-  // 35 days back from today
   for (let i = 34; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
-    const key = d.toISOString().split('T')[0];
+    const key = getLocalDateString(d);
     const count = lookup[key] || 0;
     const level = count === 0 ? 0 : count === 1 ? 2 : count === 2 ? 3 : 4;
     cells.push(LEVELS[level]);
@@ -263,7 +268,14 @@ function HabitGoalLinkDropdown({
   );
 }
 
-export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean; onFormOpened?: () => void }) {
+interface HabitsProps {
+  forceNew?: boolean;
+  onFormOpened?: () => void;
+  highlightId?: number | null;
+  onHighlightReset?: () => void;
+}
+
+export default function Habits({ forceNew, onFormOpened, highlightId, onHighlightReset }: HabitsProps) {
   const [habits,  setHabits]  = useState<Habit[]>([]);
   const [streaks, setStreaks] = useState<any[]>([]);
   const [progress, setProgress] = useState<ProgressData[]>([]);
@@ -278,7 +290,24 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
   const linkButtonRef = useRef<HTMLButtonElement>(null);
   const [formData, setFormData] = useState({
     name: '', description: '', category: '', frequency: 'daily', target_count: 1, color: '#39d353',
+    days_of_week: [0, 1, 2, 3, 4, 5, 6]
   });
+
+  // New: Handle highlighting and scrolling
+  useEffect(() => {
+    if (highlightId && !loading && habits.length > 0) {
+      const element = document.getElementById(`habit-${highlightId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Auto-reset highlight after 3 seconds
+        const timer = setTimeout(() => {
+          onHighlightReset?.();
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [highlightId, loading, habits]);
 
   const weekDates = getWeekDates();
   const todayDow  = (new Date().getDay() + 6) % 7; // 0=Mon
@@ -290,7 +319,7 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
     if (forceNew) {
       setShowForm(true);
       setEditingHabit(null);
-      setFormData({ name: '', description: '', category: '', frequency: 'daily', target_count: 1, color: '#39d353' });
+      setFormData({ name: '', description: '', category: '', frequency: 'daily', target_count: 1, color: '#39d353', days_of_week: [0, 1, 2, 3, 4, 5, 6] });
       onFormOpened?.();
     }
   }, [forceNew]);
@@ -298,14 +327,19 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
   const fetchHabits = async () => {
     try {
       setLoading(true);
+      const todayStr = getLocalDateString();
       const [h, s, p] = await Promise.all([
-        api.getHabits(),
+        api.getHabits(todayStr),
         api.getAnalyticsStreaks(),
         api.getAnalyticsProgress(),
       ]);
       setHabits(h as Habit[]);
       setStreaks(s as any[]);
       setProgress(p as ProgressData[]);
+
+      // Persistence Fix: Initialize completedIds from backend
+      const completed = (h as Habit[]).filter(habit => habit.is_completed_today).map(habit => habit.id);
+      setCompletedIds(new Set(completed));
 
       // Fetch goals for linking
       try {
@@ -321,8 +355,22 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
 
   const handleComplete = async (id: number) => {
     try {
-      await api.completeHabit(id);
+      const date = getLocalDateString();
+      await api.completeHabit(id, { date });
       setCompletedIds(prev => new Set([...prev, id]));
+      fetchHabits();
+    } catch (e) { console.error(e); }
+  };
+
+  const handleUncomplete = async (id: number) => {
+    try {
+      const date = getLocalDateString();
+      await api.uncompleteHabit(id, date);
+      setCompletedIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       fetchHabits();
     } catch (e) { console.error(e); }
   };
@@ -335,7 +383,15 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
 
   const handleEdit = (h: Habit) => {
     setEditingHabit(h);
-    setFormData({ name: h.name, description: h.description||'', category: h.category||'', frequency: h.frequency, target_count: h.target_count, color: h.color||'#39d353' });
+    setFormData({ 
+      name: h.name, 
+      description: h.description||'', 
+      category: h.category||'', 
+      frequency: h.frequency, 
+      target_count: h.target_count, 
+      color: h.color||'#39d353',
+      days_of_week: h.days_of_week || [0, 1, 2, 3, 4, 5, 6]
+    });
     setShowForm(true);
   };
 
@@ -344,7 +400,7 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
     try {
       if (editingHabit) await api.updateHabit(editingHabit.id, formData);
       else await api.createHabit(formData);
-      setFormData({ name:'', description:'', category:'', frequency:'daily', target_count:1, color:'#39d353' });
+      setFormData({ name:'', description:'', category:'', frequency:'daily', target_count:1, color:'#39d353', days_of_week: [0, 1, 2, 3, 4, 5, 6] });
       setShowForm(false); setEditingHabit(null); fetchHabits();
     } catch (e) { console.error(e); }
   };
@@ -352,10 +408,7 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
   const handleLinkGoals = async (goalIds: number[]) => {
     if (linkingHabitId === null) return;
     try {
-      // Link the habit to each selected goal
-      for (const goalId of goalIds) {
-        await api.linkHabitToGoal(goalId, linkingHabitId);
-      }
+      await api.syncHabitGoals(linkingHabitId, goalIds);
       fetchHabits();
       setLinkDropdownOpen(false);
       setLinkingHabitId(null);
@@ -367,8 +420,20 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
 
   const getStreak = (id: number) => streaks.find((s: any) => s.habit_id === id)?.current_streak || 0;
 
-  const completed = habits.filter(h => completedIds.has(h.id)).length;
-  const total     = habits.length;
+  // Filter habits for "Today's Protocol":
+  // Show if: 
+  // 1. Frequency is daily
+  // 2. OR Frequency is weekly AND today is in days_of_week
+  // 3. OR It was completed today (even if not strictly due)
+  const todayHabits = habits.filter(h => {
+    if (completedIds.has(h.id)) return true;
+    if (h.frequency === 'daily') return true;
+    if (h.frequency === 'weekly' && h.days_of_week?.includes(todayDow)) return true;
+    return false;
+  });
+
+  const completed = todayHabits.filter(h => completedIds.has(h.id)).length;
+  const total     = todayHabits.length;
 
   // Format target_count into readable string
   const fmtTarget = (h: Habit): string => {
@@ -439,7 +504,7 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
       {/* ── Protocol list ─────────────────────────────── */}
       <div className="flex flex-col divide-y divide-[#ffffff06] border border-[#ffffff08] rounded-[14px] overflow-hidden mb-6">
 
-        {habits.map((habit) => {
+        {todayHabits.map((habit) => {
           const Icon      = pickIcon(habit.name);
           const color     = pickColor(habit.color);
           const streak    = getStreak(habit.id);
@@ -449,7 +514,12 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
           return (
             <div
               key={habit.id}
-              className="group flex items-center gap-4 px-5 py-4 bg-[#171f33] hover:bg-[#1c2540] transition-all relative"
+              id={`habit-${habit.id}`}
+              className={`group flex items-center gap-4 px-5 py-4 transition-all relative ${
+                highlightId === habit.id 
+                  ? 'border-[#7c79ff] ring-2 ring-[#7c79ff]/30 bg-[#1c2540] shadow-[0_0_20px_rgba(124,121,255,0.3)]' 
+                  : 'bg-[#171f33] hover:bg-[#1c2540]'
+              }`}
             >
               {/* Colored icon bubble */}
               <div
@@ -479,7 +549,7 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
                   ref={linkingHabitId === habit.id ? linkButtonRef : null}
                   onClick={() => {
                     setLinkingHabitId(habit.id);
-                    setLinkedGoalIds([]); // Will be filled from API when needed
+                    setLinkedGoalIds(habit.goal_ids || []);
                     setLinkDropdownOpen(true);
                   }}
                   className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#7c79ff] transition-all"
@@ -503,15 +573,20 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
 
               {/* Complete button */}
               {isDone ? (
-                <button className="w-9 h-9 rounded-full border-2 border-[#22c55e] flex items-center justify-center shrink-0">
+                <button 
+                  onClick={() => handleUncomplete(habit.id)}
+                  className="w-9 h-9 rounded-full border-2 border-[#22c55e] flex items-center justify-center shrink-0 hover:bg-[#22c55e10] transition-all"
+                  title="Uncomplete"
+                >
                   <Check className="w-4 h-4 text-[#22c55e]" />
                 </button>
               ) : (
                 <button
                   onClick={() => handleComplete(habit.id)}
                   className="w-9 h-9 rounded-full border border-[#ffffff20] flex items-center justify-center text-[#8b949e] hover:border-[#22c55e] hover:text-[#22c55e] transition-all shrink-0"
+                  title="Complete"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Circle className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -564,6 +639,34 @@ export default function Habits({ forceNew, onFormOpened }: { forceNew?: boolean;
                 placeholder="Target/day"
               />
             </div>
+
+            {/* Day selector for weekly habits */}
+            {formData.frequency === 'weekly' && (
+              <div className="p-3 bg-[#0d1117] border border-[#ffffff0a] rounded-[8px]">
+                <p className="text-[11px] text-[#8b949e] uppercase tracking-widest font-bold mb-3">Repeat on</p>
+                <div className="flex justify-between gap-1">
+                  {DAYS.map((day, i) => (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => {
+                        const newDays = formData.days_of_week.includes(i)
+                          ? formData.days_of_week.filter(d => d !== i)
+                          : [...formData.days_of_week, i].sort();
+                        setFormData({ ...formData, days_of_week: newDays });
+                      }}
+                      className={`w-9 h-9 rounded-[8px] text-[11px] font-bold transition-all ${
+                        formData.days_of_week.includes(i)
+                          ? 'bg-[#7c79ff] text-white'
+                          : 'bg-[#1c2540] text-[#8b949e] hover:text-[#c7c4d7]'
+                      }`}
+                    >
+                      {day.at(0)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Color picker */}
             <div className="flex gap-3 items-center">
               <span className="text-[11px] text-[#8b949e] uppercase tracking-widest font-bold">Color</span>

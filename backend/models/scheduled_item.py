@@ -93,4 +93,4 @@ class ScheduledItem:
             WHERE user_id = %s AND item_type = %s AND item_id = %s AND scheduled_date = %s
         """
         result = execute_query(query, (user_id, item_type, item_id, scheduled_date), fetch_one=True)
-        return result is not None
+        return result

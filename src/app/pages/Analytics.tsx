@@ -5,7 +5,7 @@ import {
   ResponsiveContainer,
   AreaChart, Area, Legend
 } from 'recharts';
-import { Chart as ChartJS, LineElement, PointElement, Tooltip as ChartJSTooltip, Legend as ChartJSLegend, RadialLinearScale } from 'chart.js';
+import { Chart as ChartJS, LineElement, PointElement, Tooltip as ChartJSTooltip, Legend as ChartJSLegend, RadialLinearScale, Filler } from 'chart.js';
 import { Chart as ChartComponent } from 'react-chartjs-2';
 import { TrendingUp, Award, Target, Zap, Activity, PieChart, Info } from 'lucide-react';
 
@@ -15,7 +15,8 @@ ChartJS.register(
   PointElement,
   ChartJSTooltip,
   ChartJSLegend,
-  RadialLinearScale
+  RadialLinearScale,
+  Filler
 );
 
 interface AnalyticsSummary {
@@ -62,9 +63,10 @@ export default function Analytics() {
     try {
       setLoading(true);
       setError(null);
+      const date = new Date().toLocaleDateString('sv-SE');
       const [summaryRes, progressRes] = await Promise.all([
-        api.getAnalyticsSummary(),
-        api.getAnalyticsProgress(),
+        api.getAnalyticsSummary(date),
+        api.getAnalyticsProgress(date),
       ]);
 
       console.log('Analytics Summary:', summaryRes);
@@ -256,7 +258,7 @@ export default function Analytics() {
                       pointRadius: 5,
                       pointHoverRadius: 8,
                       fill: true,
-                      tension: 0.4,
+                      tension: 0,
                       borderCapStyle: 'round',
                       borderJoinStyle: 'round',
                     },

@@ -37,16 +37,16 @@ interface StreakData {
 // Helper to generate heatmap data from real progress
 const generateHeatmapData = (progress: ProgressData[]) => {
   if (!progress.length) {
-    return Array(28).fill({ intensity: 0 });
+    return Array(35).fill({ intensity: 0 });
   }
-  // Take last 28 days or pad with empty objects
-  const last28 = progress.slice(-28);
-  const data = last28.map(item => ({
-    intensity: item.count > 5 ? 4 : item.count > 2 ? 3 : item.count > 1 ? 2 : item.count > 0 ? 1 : 0
+  // Take last 35 days or pad with empty objects
+  const last35 = progress.slice(-35);
+  const data = last35.map(item => ({
+    intensity: item.count > 4 ? 4 : item.count > 2 ? 3 : item.count > 1 ? 2 : item.count > 0 ? 1 : 0
   }));
-  
-  // Pad if less than 28
-  while (data.length < 28) {
+
+  // Pad if less than 35
+  while (data.length < 35) {
     data.unshift({ intensity: 0 });
   }
   return data;
@@ -67,10 +67,11 @@ export default function Dashboard() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
+      const date = new Date().toLocaleDateString('sv-SE');
       const [summaryRes, progressRes, streaksRes, activityRes] = await Promise.all([
-        api.getAnalyticsSummary(),
-        api.getAnalyticsProgress(),
-        api.getAnalyticsStreaks(),
+        api.getAnalyticsSummary(date),
+        api.getAnalyticsProgress(date),
+        api.getAnalyticsStreaks(date),
         api.getRecentActivity(),
       ]);
 
@@ -120,12 +121,12 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="text-right flex flex-col items-end">
-           <div className="bg-[#161b22] border border-[#30363d] px-4 py-2 rounded-[10px] flex items-center gap-3">
-              <Calendar className="w-4 h-4 text-[#7c79ff]" />
-              <span className="text-[#e6edf3] text-[13px] font-bold uppercase tracking-wider">
-                {new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()}
-              </span>
-           </div>
+          <div className="bg-[#161b22] border border-[#30363d] px-4 py-2 rounded-[10px] flex items-center gap-3">
+            <Calendar className="w-4 h-4 text-[#7c79ff]" />
+            <span className="text-[#e6edf3] text-[13px] font-bold uppercase tracking-wider">
+              {new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -133,21 +134,21 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {[
           { label: 'Total Tasks', value: summary?.total_tasks || 0, color: '#7c79ff', path: '/actions', icon: Activity },
-          { label: 'Completed', value: summary?.completed_tasks || 0, color: '#39d353', path: '/actions', icon: CheckCircle2 },
-          { label: 'Efficiency', value: `${summary?.completion_rate || 0}%`, color: '#ff7b72', path: '/analytics', icon: TrendingUp }
+          { label: 'Completed Tasks', value: summary?.completed_tasks || 0, color: '#39d353', path: '/actions', icon: CheckCircle2 },
+          { label: 'Success Rate', value: `${summary?.completion_rate || 0}%`, color: '#ff7b72', path: '/analytics', icon: TrendingUp }
         ].map((stat, i) => (
-          <button 
+          <button
             key={i}
             onClick={() => navigate(stat.path)}
             className="bg-[#161b22]/50 backdrop-blur-sm border border-[#30363d] rounded-[20px] p-8 hover:bg-[#161b22] hover:border-[#30363d] hover:shadow-[0_10px_30px_rgba(0,0,0,0.3)] transition-all group relative overflow-hidden text-left"
           >
             <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-100 transition-all transform translate-x-4 group-hover:translate-x-0">
-               <ArrowUpRight className="w-5 h-5 text-[#8b949e]" />
+              <ArrowUpRight className="w-5 h-5 text-[#8b949e]" />
             </div>
             <div className="flex flex-col h-full">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 rounded-[8px] bg-white/5 border border-white/10">
-                   <stat.icon className="w-4 h-4" style={{ color: stat.color }} />
+                  <stat.icon className="w-4 h-4" style={{ color: stat.color }} />
                 </div>
                 <p className="text-[#8b949e] text-[11px] font-black uppercase tracking-[0.15em]">{stat.label}</p>
               </div>
@@ -179,11 +180,11 @@ export default function Dashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#30363d" opacity={0.5} />
-                <XAxis 
-                  dataKey="day" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#8b949e', fontSize: 10, fontWeight: '900', letterSpacing: '0.1em' }} 
+                <XAxis
+                  dataKey="day"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#8b949e', fontSize: 10, fontWeight: '900', letterSpacing: '0.1em' }}
                   dy={15}
                 />
                 <YAxis hide />
@@ -199,10 +200,10 @@ export default function Dashboard() {
                     boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
                   }}
                 />
-                <Bar 
-                  dataKey="completions" 
+                <Bar
+                  dataKey="completions"
                   fill="url(#barGradient)"
-                  radius={[6, 6, 0, 0]} 
+                  radius={[6, 6, 0, 0]}
                   barSize={50}
                   className="cursor-pointer"
                 >
@@ -223,7 +224,7 @@ export default function Dashboard() {
               <h3 className="text-[18px] font-bold text-[#e6edf3]">Active Habits</h3>
               <MoreHorizontal className="w-5 h-5 text-[#8b949e] cursor-pointer hover:text-[#e6edf3] transition-colors" />
             </div>
-            
+
             <div className="space-y-4 flex-1">
               {streakData.length > 0 ? (
                 streakData.slice(0, 4).map((streak) => (
@@ -253,21 +254,28 @@ export default function Dashboard() {
             {/* Consistency Heatmap */}
             <div className="mt-10 pt-10 border-t border-[#30363d]">
               <div className="flex items-center justify-between mb-6">
-                 <h4 className="text-[10px] font-black text-[#8b949e] uppercase tracking-[0.2em] opacity-60">Consistency Grid</h4>
-                 <div className="flex gap-1.5">
-                    {[0, 1, 2, 3, 4].map(v => (
-                       <div key={v} className="w-2.5 h-2.5 rounded-[1px]" style={{ backgroundColor: v === 0 ? '#161b22' : v === 1 ? '#0e4429' : v === 2 ? '#26a641' : v === 3 ? '#39d353' : '#39d353' }} />
-                    ))}
-                 </div>
+                <div className="flex flex-col">
+                  <h4 className="text-[10px] font-black text-[#8b949e] uppercase tracking-[0.2em] opacity-60">Consistency Grid</h4>
+                  <p className="text-[12px] font-bold text-[#e6edf3] mt-1">35-Day Connectivity</p>
+                </div>
+                <div className="flex gap-1.5 items-center">
+                  <span className="text-[9px] text-[#8b949e] font-black uppercase tracking-widest mr-2">Intensity</span>
+                  {[0, 1, 2, 3, 4].map(v => (
+                    <div key={v} className="w-2.5 h-2.5 rounded-[1px]" style={{ backgroundColor: v === 0 ? '#161b22' : v === 1 ? '#0e4429' : v === 2 ? '#26a641' : v === 3 ? '#39d353' : '#39d353' }} />
+                  ))}
+                </div>
               </div>
-              <div className="grid grid-cols-7 gap-1.5">
+              <div className="grid grid-cols-7 gap-2">
                 {heatmapData.map((day, i) => {
                   const colors = ['#161b22', '#0e4429', '#006d32', '#219641', '#39d353'];
                   return (
-                    <div 
-                      key={i} 
-                      className="w-full aspect-square rounded-[2px] transition-all hover:scale-125 cursor-help" 
-                      style={{ backgroundColor: colors[day.intensity] }}
+                    <div
+                      key={i}
+                      className="w-full aspect-square rounded-[2px] transition-all hover:scale-125 cursor-help ring-1 ring-white/5"
+                      style={{ 
+                        backgroundColor: colors[day.intensity],
+                        boxShadow: day.intensity > 0 ? `0 0 10px ${colors[day.intensity]}20` : 'none'
+                      }}
                       title={`Stability Level: ${day.intensity}`}
                     />
                   );
@@ -289,7 +297,7 @@ export default function Dashboard() {
             <>
               {recentActivity.slice(0, 3).map((event, i) => {
                 const getActivityInfo = (type: string) => {
-                  switch(type) {
+                  switch (type) {
                     case 'task_created': return { color: '#58a6ff', text: 'Created task' };
                     case 'task_completed': return { color: '#39d353', text: 'Completed task' };
                     case 'habit_completed': return { color: '#39d353', text: 'Completed habit' };
@@ -301,27 +309,27 @@ export default function Dashboard() {
                 const activity = getActivityInfo(event.type);
                 const timeAgo = event.occurred_at
                   ? (() => {
-                      try {
-                        const eventDate = new Date(event.occurred_at);
-                        if (isNaN(eventDate.getTime())) return 'Recently';
-                        
-                        const now = new Date();
-                        const diff = now.getTime() - eventDate.getTime();
-                        
-                        if (diff < 0) return 'Just now';
-                        
-                        const mins = Math.floor(diff / 60000);
-                        const hrs = Math.floor(mins / 60);
-                        const days = Math.floor(hrs / 24);
-                        
-                        if (days > 0) return `${days}d ago`;
-                        if (hrs > 0) return `${hrs}h ago`;
-                        if (mins > 0) return `${mins}m ago`;
-                        return 'Just now';
-                      } catch {
-                        return 'Recently';
-                      }
-                    })()
+                    try {
+                      const eventDate = new Date(event.occurred_at);
+                      if (isNaN(eventDate.getTime())) return 'Recently';
+
+                      const now = new Date();
+                      const diff = now.getTime() - eventDate.getTime();
+
+                      if (diff < 0) return 'Just now';
+
+                      const mins = Math.floor(diff / 60000);
+                      const hrs = Math.floor(mins / 60);
+                      const days = Math.floor(hrs / 24);
+
+                      if (days > 0) return `${days}d ago`;
+                      if (hrs > 0) return `${hrs}h ago`;
+                      if (mins > 0) return `${mins}m ago`;
+                      return 'Just now';
+                    } catch {
+                      return 'Recently';
+                    }
+                  })()
                   : 'Recently';
                 return (
                   <div key={i} className="flex gap-4">

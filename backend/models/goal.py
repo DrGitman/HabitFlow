@@ -69,19 +69,47 @@ class Goal:
         return execute_query(query, (goal_id, user_id), fetch_all=False)
 
     @staticmethod
-    def calculate_goal_progress(user_id, goal_id):
-        """Calculate goal progress from linked tasks: (completed_tasks / total_linked_tasks) * 100"""
-        query = """
+    def calculate_goal_progress(user_id, goal_id, today_date=None):
+        """
+        Calculate goal progress from:
+        (Completed Tasks + Habits Completed Today) / (Total Tasks + Total Habits)
+        """
+        # Tasks linked to goal
+        task_query = """
             SELECT 
                 COUNT(*) as total_tasks,
                 SUM(CASE WHEN is_completed = true THEN 1 ELSE 0 END) as completed_tasks
             FROM tasks
             WHERE user_id = %s AND goal_id = %s
         """
-        result = execute_query(query, (user_id, goal_id), fetch_one=True)
+        task_result = execute_query(task_query, (user_id, goal_id), fetch_one=True)
         
-        total = result['total_tasks'] if result else 0
-        completed = result['completed_tasks'] if result else 0
+        # Habits linked to goal
+        if not today_date:
+            today_date = datetime.now().date()
+        elif isinstance(today_date, str):
+            today_date = datetime.strptime(today_date, '%Y-%m-%d').date()
+
+        habit_query = """
+            SELECT 
+                COUNT(gh.habit_id) as total_habits,
+                SUM(CASE WHEN EXISTS (
+                    SELECT 1 FROM habit_completions hc 
+                    WHERE hc.habit_id = gh.habit_id AND hc.completion_date = %s
+                ) THEN 1 ELSE 0 END) as completed_habits
+            FROM goal_habits gh
+            WHERE gh.goal_id = %s
+        """
+        habit_result = execute_query(habit_query, (today_date, goal_id), fetch_one=True)
+        
+        total_tasks = task_result['total_tasks'] if task_result else 0
+        completed_tasks = task_result['completed_tasks'] if task_result else 0
+        
+        total_habits = habit_result['total_habits'] if habit_result else 0
+        completed_habits = habit_result['completed_habits'] if habit_result else 0
+        
+        total = total_tasks + total_habits
+        completed = completed_tasks + completed_habits
         
         if total == 0:
             return 0
@@ -89,7 +117,7 @@ class Goal:
         return round((completed / total) * 100, 1)
 
     @staticmethod
-    def calculate_days_remaining(goal_id, user_id):
+    def calculate_days_remaining(goal_id, user_id, today_date=None):
         """Calculate days remaining until deadline"""
         goal = Goal.get_by_id(goal_id, user_id)
         if not goal or not goal.get('deadline'):
@@ -99,13 +127,17 @@ class Goal:
         if isinstance(deadline, str):
             deadline = datetime.strptime(deadline.split('T')[0], '%Y-%m-%d').date()
         
-        today = datetime.now().date()
-        days_remaining = (deadline - today).days
+        if not today_date:
+            today_date = datetime.now().date()
+        elif isinstance(today_date, str):
+            today_date = datetime.strptime(today_date, '%Y-%m-%d').date()
+
+        days_remaining = (deadline - today_date).days
         
         return days_remaining
 
     @staticmethod
-    def calculate_time_progress(user_id, goal_id):
+    def calculate_time_progress(user_id, goal_id, today_date=None):
         """Calculate time progress: (days_passed / total_days) * 100"""
         goal = Goal.get_by_id(goal_id, user_id)
         if not goal or not goal.get('deadline'):
@@ -124,9 +156,13 @@ class Goal:
         if isinstance(deadline, str):
             deadline = datetime.strptime(deadline.split('T')[0], '%Y-%m-%d').date()
         
-        today = datetime.now().date()
+        if not today_date:
+            today_date = datetime.now().date()
+        elif isinstance(today_date, str):
+            today_date = datetime.strptime(today_date, '%Y-%m-%d').date()
+        
         total_days = (deadline - start_date).days
-        days_passed = (today - start_date).days
+        days_passed = (today_date - start_date).days
         
         if total_days <= 0:
             return 100
@@ -134,7 +170,7 @@ class Goal:
         return round((days_passed / total_days) * 100, 1)
 
     @staticmethod
-    def calculate_all_metrics(user_id):
+    def calculate_all_metrics(user_id, today_date=None):
         """Calculate all goal metrics"""
         goals = Goal.get_all(user_id)
         total_goals = len(goals)
@@ -144,9 +180,9 @@ class Goal:
         total_progress = 0
         
         for goal in goals:
-            goal_progress = Goal.calculate_goal_progress(user_id, goal['id'])
-            days_remaining = Goal.calculate_days_remaining(goal['id'], user_id)
-            time_progress = Goal.calculate_time_progress(user_id, goal['id'])
+            goal_progress = Goal.calculate_goal_progress(user_id, goal['id'], today_date=today_date)
+            days_remaining = Goal.calculate_days_remaining(goal['id'], user_id, today_date=today_date)
+            time_progress = Goal.calculate_time_progress(user_id, goal['id'], today_date=today_date)
             
             total_progress += goal_progress
             

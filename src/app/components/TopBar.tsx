@@ -97,11 +97,28 @@ export default function TopBar() {
                       {searchResults.tasks.slice(0, 3).map((task: any) => (
                         <button 
                           key={task.id}
-                          onClick={() => { navigate('/tasks'); setShowResults(false); }}
+                          onClick={() => { navigate('/actions', { state: { highlightId: task.id, type: 'task' } }); setShowResults(false); }}
                           className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#161b22] rounded-[10px] transition-colors text-left group"
                         >
                           <CheckSquare className="w-4 h-4 text-[#7c79ff]" />
                           <span className="text-[13px] text-[#e6edf3] font-bold truncate group-hover:text-[#7c79ff]">{task.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Goals Section */}
+                  {(searchResults?.goals?.length > 0) && (
+                    <div className="space-y-1 border-t border-[#ffffff05] pt-3">
+                      <p className="px-3 py-1.5 text-[9px] font-black text-[#8b949e] uppercase tracking-[0.2em] opacity-60">Goals (Milestones)</p>
+                      {searchResults.goals.slice(0, 3).map((goal: any) => (
+                        <button 
+                          key={goal.id}
+                          onClick={() => { navigate('/actions', { state: { highlightId: goal.id, type: 'goal' } }); setShowResults(false); }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#161b22] rounded-[10px] transition-colors text-left group"
+                        >
+                          <Target className="w-4 h-4 text-[#f85149]" />
+                          <span className="text-[13px] text-[#e6edf3] font-bold truncate group-hover:text-[#f85149]">{goal.title}</span>
                         </button>
                       ))}
                     </div>
@@ -114,21 +131,13 @@ export default function TopBar() {
                       {searchResults.habits.slice(0, 3).map((habit: any) => (
                         <button 
                           key={habit.id}
-                          onClick={() => { navigate('/habits'); setShowResults(false); }}
+                          onClick={() => { navigate('/actions', { state: { highlightId: habit.id, type: 'habit' } }); setShowResults(false); }}
                           className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#161b22] rounded-[10px] transition-colors text-left group"
                         >
                           <Activity className="w-4 h-4 text-[#39d353]" />
                           <span className="text-[13px] text-[#e6edf3] font-bold truncate group-hover:text-[#39d353]">{habit.name}</span>
                         </button>
                       ))}
-                    </div>
-                  )}
-
-                  {/* Empty State */}
-                  {(!searchResults?.tasks?.length && !searchResults?.habits?.length && !searchResults?.goals?.length) && (
-                    <div className="p-12 text-center flex flex-col items-center gap-2">
-                       <Zap className="w-8 h-8 text-[#30363d] mb-2" />
-                      <p className="text-[#8b949e] text-[12px] font-medium uppercase tracking-widest opacity-60">No entities found.</p>
                     </div>
                   )}
                 </div>

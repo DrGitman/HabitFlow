@@ -107,9 +107,8 @@ def seed_achievements():
                         rank_type = EXCLUDED.rank_type
                 """, (ach["name"], ach["description"], ach["type"], ach["threshold_value"], ach["icon"], ach["color"], ach["rank_type"]))
             except Exception as e:
-                print("Failed inserting", ach["name"], e)
-                conn.rollback()  # rollback transaction for this fail, wait actually rollback will reset the context manager
-                raise e
+                print(f"Skipping {ach['name']} due to error: {e}")
+                conn.rollback() # Still need to rollback failed sub-transaction if using manual transaction
             
         print("Achievements seeded successfully!")
 

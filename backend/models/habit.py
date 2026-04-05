@@ -4,18 +4,56 @@ from datetime import datetime, timedelta
 
 class Habit:
     @staticmethod
-    def create(user_id, name, description=None, category=None, frequency='daily', target_count=1, color=None, icon=None):
+    def create(user_id, name, description=None, category=None, frequency='daily', target_count=1, color=None, icon=None, days_of_week=None):
         """Create a new habit"""
+        if days_of_week is None:
+            days_of_week = [0, 1, 2, 3, 4, 5, 6]
         query = """
-            INSERT INTO habits (user_id, name, description, category, frequency, target_count, color, icon)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO habits (user_id, name, description, category, frequency, target_count, color, icon, days_of_week)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
         """
-        return execute_query(query, (user_id, name, description, category, frequency, target_count, color, icon), fetch_one=True)
+        return execute_query(query, (user_id, name, description, category, frequency, target_count, color, icon, days_of_week), fetch_one=True)
 
     @staticmethod
-    def get_all(user_id, is_active=True):
+    def get_all(user_id, is_active=True, include_completion_today=True, today_date=None):
         """Get all habits for user"""
+        if include_completion_today:
+            if not today_date:
+                today_date = datetime.now().date()
+            try:
+                query = """
+                    SELECT h.*, 
+                    EXISTS (
+                        SELECT 1 FROM habit_completions hc 
+                        WHERE hc.habit_id = h.id AND hc.completion_date = %s
+                    ) as is_completed_today,
+                    COALESCE((
+                        SELECT array_agg(goal_id) FROM goal_habits 
+                        WHERE habit_id = h.id
+                    ), ARRAY[]::INTEGER[]) as goal_ids
+                    FROM habits h 
+                    WHERE h.user_id = %s AND h.is_active = %s 
+                    ORDER BY h.created_at DESC
+                """
+                return execute_query(query, (today_date, user_id, is_active))
+            except Exception as e:
+                # Fallback if goal_habits table is not accessible
+                if "permission denied" in str(e).lower() or "does not exist" in str(e).lower():
+                    query = """
+                        SELECT h.*, 
+                        EXISTS (
+                            SELECT 1 FROM habit_completions hc 
+                            WHERE hc.habit_id = h.id AND hc.completion_date = %s
+                        ) as is_completed_today,
+                        ARRAY[]::INTEGER[] as goal_ids
+                        FROM habits h 
+                        WHERE h.user_id = %s AND h.is_active = %s 
+                        ORDER BY h.created_at DESC
+                    """
+                    return execute_query(query, (today_date, user_id, is_active))
+                raise e
+        
         query = "SELECT * FROM habits WHERE user_id = %s AND is_active = %s ORDER BY created_at DESC"
         return execute_query(query, (user_id, is_active))
 
@@ -64,6 +102,34 @@ class Habit:
         return execute_query(query, (habit_id, user_id, completion_date, count, notes), fetch_one=True)
 
     @staticmethod
+    def unmark_complete(habit_id, user_id, completion_date=None):
+        """Remove habit completion for a date"""
+        if not completion_date:
+            completion_date = datetime.now().date()
+
+        query = "DELETE FROM habit_completions WHERE habit_id = %s AND user_id = %s AND completion_date = %s"
+        return execute_query(query, (habit_id, user_id, completion_date), fetch_all=False)
+
+    @staticmethod
+    def sync_goal_links(habit_id, goal_ids):
+        """Atomically sync habit to multiple goals"""
+        # Delete old links
+        execute_query("DELETE FROM goal_habits WHERE habit_id = %s", (habit_id,), fetch_all=False)
+        
+        # Insert new links
+        if goal_ids:
+            for goal_id in goal_ids:
+                execute_query("INSERT INTO goal_habits (goal_id, habit_id) VALUES (%s, %s)", (goal_id, habit_id), fetch_all=False)
+        return True
+
+    @staticmethod
+    def get_goal_links(habit_id):
+        """Get all goal IDs linked to this habit"""
+        query = "SELECT goal_id FROM goal_habits WHERE habit_id = %s"
+        results = execute_query(query, (habit_id,))
+        return [r['goal_id'] for r in results] if results else []
+
+    @staticmethod
     def get_completions(habit_id, user_id, start_date=None, end_date=None):
         """Get habit completions"""
         query = "SELECT * FROM habit_completions WHERE habit_id = %s AND user_id = %s"
@@ -81,7 +147,7 @@ class Habit:
         return execute_query(query, tuple(params))
 
     @staticmethod
-    def calculate_streak(habit_id, user_id):
+    def calculate_streak(habit_id, user_id, today=None):
         """Calculate current streak for a habit"""
         query = """
             SELECT completion_date FROM habit_completions
@@ -94,7 +160,10 @@ class Habit:
             return 0
 
         current_streak = 0
-        today = datetime.now().date()
+        if not today:
+            today = datetime.now().date()
+        elif isinstance(today, str):
+            today = datetime.strptime(today, '%Y-%m-%d').date()
         last_date = None
 
         for comp in completions:
@@ -153,7 +222,7 @@ class Habit:
         return longest_streak
 
     @staticmethod
-    def calculate_consistency(habit_id, user_id):
+    def calculate_consistency(habit_id, user_id, today_date=None):
         """Calculate consistency: (days_completed / days_since_creation) * 100"""
         habit = Habit.get_by_id(habit_id, user_id)
         if not habit:
@@ -168,8 +237,12 @@ class Habit:
         else:
             created_date = created_at.date()
 
-        today = datetime.now().date()
-        total_days = (today - created_date).days + 1
+        if not today_date:
+            today_date = datetime.now().date()
+        elif isinstance(today_date, str):
+            today_date = datetime.strptime(today_date, '%Y-%m-%d').date()
+
+        total_days = (today_date - created_date).days + 1
 
         if total_days <= 0:
             return 0
@@ -185,34 +258,38 @@ class Habit:
         return round((days_completed / total_days) * 100, 1)
 
     @staticmethod
-    def calculate_today_completion(user_id):
+    def calculate_today_completion(user_id, today_date=None):
         """Calculate today's completion rate: completed_habits_today / total_habits"""
-        habits = Habit.get_all(user_id)
+        habits = Habit.get_all(user_id, today_date=today_date)
         total_habits = len(habits)
 
         if total_habits == 0:
             return 0
 
-        today = datetime.now().date()
+        if not today_date:
+            today_date = datetime.now().date()
+        elif isinstance(today_date, str):
+            today_date = datetime.strptime(today_date, '%Y-%m-%d').date()
+
         query = """
             SELECT COUNT(DISTINCT habit_id) as completed_today
             FROM habit_completions
             WHERE user_id = %s AND completion_date = %s
         """
-        result = execute_query(query, (user_id, today), fetch_one=True)
+        result = execute_query(query, (user_id, today_date), fetch_one=True)
         completed_today = result['completed_today'] if result else 0
 
         return round((completed_today / total_habits) * 100, 1)
 
     @staticmethod
-    def calculate_all_metrics(user_id):
+    def calculate_all_metrics(user_id, today_date=None):
         """Calculate all habit metrics"""
-        habits = Habit.get_all(user_id)
+        habits = Habit.get_all(user_id, today_date=today_date)
         total_habits = len(habits)
 
         metrics = {
             'total_habits': total_habits,
-            'today_completion': Habit.calculate_today_completion(user_id),
+            'today_completion': Habit.calculate_today_completion(user_id, today_date=today_date),
             'habits_data': []
         }
 
@@ -221,9 +298,9 @@ class Habit:
                 'id': habit['id'],
                 'name': habit['name'],
                 'color': habit.get('color'),
-                'current_streak': Habit.calculate_streak(habit['id'], user_id),
+                'current_streak': Habit.calculate_streak(habit['id'], user_id, today=today_date),
                 'longest_streak': Habit.calculate_longest_streak(habit['id'], user_id),
-                'consistency': Habit.calculate_consistency(habit['id'], user_id)
+                'consistency': Habit.calculate_consistency(habit['id'], user_id, today_date=today_date)
             }
             metrics['habits_data'].append(habit_metrics)
 

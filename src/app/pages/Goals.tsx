@@ -33,15 +33,18 @@ const priorityStyles: Record<string, { bg: string; text: string }> = {
 interface GoalsProps {
   forceNew?: boolean;
   onFormOpened?: () => void;
+  highlightId?: number | null;
+  onHighlightReset?: () => void;
 }
 
-export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
+export default function Goals({ forceNew, onFormOpened, highlightId, onHighlightReset }: GoalsProps) {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [prevMonthProgress, setPrevMonthProgress] = useState(0);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [habits, setHabits] = useState<any[]>([]);
   const [goalProgress, setGoalProgress] = useState<Record<number, { completed: number; total: number }>>({});
   const [formData, setFormData] = useState({
     title: '',
@@ -55,19 +58,30 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
   }, []);
 
   useEffect(() => {
-    if (goals.length > 0 && tasks.length > 0) {
-      const progress: Record<number, { completed: number; total: number }> = {};
-      for (const goal of goals) {
-        const linkedTasks = tasks.filter(t => t.goal_id === goal.id);
-        const completedCount = linkedTasks.filter(t => t.is_completed).length;
-        progress[goal.id] = { completed: completedCount, total: linkedTasks.length };
-      }
-      setGoalProgress(progress);
+    if (goals.length > 0) {
+      calculateProgress(goals, tasks, habits);
       // Check if any goals should be auto-completed or reverted
-      checkAndAutoCompleteGoals(goals, tasks);
-      checkAndRevertGoals(goals, tasks);
+      checkAndAutoCompleteGoals(goals, tasks, habits);
+      checkAndRevertGoals(goals, tasks, habits);
     }
-  }, [goals, tasks]);
+  }, [goals, tasks, habits]);
+
+  const calculateProgress = (goalList: Goal[], taskList: any[], habitList: any[]) => {
+    const progress: Record<number, { completed: number; total: number }> = {};
+    for (const goal of goalList) {
+      const linkedTasks = taskList.filter(t => t.goal_id === goal.id);
+      const linkedHabits = habitList.filter(h => h.goal_ids?.includes(goal.id));
+      
+      const completedTasks = linkedTasks.filter(t => t.is_completed).length;
+      const habitsDoneToday = linkedHabits.filter(h => h.is_completed_today).length;
+      
+      progress[goal.id] = { 
+        completed: completedTasks + habitsDoneToday, 
+        total: linkedTasks.length + linkedHabits.length 
+      };
+    }
+    setGoalProgress(progress);
+  };
 
   // Handle forceNew from Quick Commit
   useEffect(() => {
@@ -78,24 +92,36 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
     }
   }, [forceNew]);
 
+  // New: Handle highlighting and scrolling
+  useEffect(() => {
+    if (highlightId && !loading && goals.length > 0) {
+      const element = document.getElementById(`goal-${highlightId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Auto-reset highlight after 3 seconds
+        const timer = setTimeout(() => {
+          onHighlightReset?.();
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [highlightId, loading, goals]);
+
   const fetchGoals = async () => {
     try {
       setLoading(true);
       const data = await api.getGoals();
       setGoals(data as Goal[]);
-      calculatePrevMonthProgress(data);
-      // Fetch tasks to calculate progress
-      const allTasks = await api.getTasks();
+      calculatePrevMonthProgress(data as any[]);
+      const [allTasks, allHabits] = await Promise.all([
+        api.getTasks(),
+        api.getHabits()
+      ]);
       setTasks(allTasks as any[]);
-      // Calculate progress for each goal
-      const progress: Record<number, { completed: number; total: number }> = {};
-      const goalIds = data.map((g: Goal) => g.id);
-      for (const goalId of goalIds) {
-        const linkedTasks = (allTasks as any[]).filter(t => t.goal_id === goalId);
-        const completedCount = linkedTasks.filter(t => t.is_completed).length;
-        progress[goalId] = { completed: completedCount, total: linkedTasks.length };
-      }
-      setGoalProgress(progress);
+      setHabits(allHabits as any[]);
+      
+      calculateProgress(data as Goal[], allTasks as any[], allHabits as any[]);
     } catch (e) { 
       console.error('Error fetching goals:', e); 
       setGoals([]);
@@ -116,15 +142,6 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
       } catch (e) {
         console.error('Error deleting goal:', e);
       }
-    }
-  };
-
-  const handleMarkComplete = async (goal: Goal) => {
-    try {
-      await api.updateGoal(goal.id, { is_completed: true });
-      fetchGoals();
-    } catch (e) {
-      console.error('Error completing goal:', e);
     }
   };
 
@@ -187,15 +204,23 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
     return { onTrackCount, activeGoals, completedGoals };
   };
 
-  // Auto-complete goals when all linked tasks are completed
-  const checkAndAutoCompleteGoals = async (goalsToCheck: Goal[], tasksToCheck: any[]) => {
+  // Auto-complete goals when all linked units are completed
+  const checkAndAutoCompleteGoals = async (goalsToCheck: Goal[], tasksToCheck: any[], habitsToCheck: any[]) => {
     const goalsToComplete: number[] = [];
     
     for (const goal of goalsToCheck) {
       if (!goal.is_completed) {
         const linkedTasks = tasksToCheck.filter(t => t.goal_id === goal.id);
-        if (linkedTasks.length > 0 && linkedTasks.every(t => t.is_completed)) {
-          goalsToComplete.push(goal.id);
+        const linkedHabits = habitsToCheck.filter(h => h.goal_ids?.includes(goal.id));
+        
+        const totalItems = linkedTasks.length + linkedHabits.length;
+        if (totalItems > 0) {
+          const allTasksDone = linkedTasks.length === 0 || linkedTasks.every(t => t.is_completed);
+          const allHabitsDoneToday = linkedHabits.length === 0 || linkedHabits.every(h => h.is_completed_today);
+          
+          if (allTasksDone && allHabitsDoneToday) {
+            goalsToComplete.push(goal.id);
+          }
         }
       }
     }
@@ -215,15 +240,19 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
     }
   };
 
-  // Revert completed goals back to active if any linked task becomes uncompleted
-  const checkAndRevertGoals = async (goalsToCheck: Goal[], tasksToCheck: any[]) => {
+  // Revert completed goals back to active if any linked unit becomes uncompleted
+  const checkAndRevertGoals = async (goalsToCheck: Goal[], tasksToCheck: any[], habitsToCheck: any[]) => {
     const goalsToRevert: number[] = [];
     
     for (const goal of goalsToCheck) {
       if (goal.is_completed) {
         const linkedTasks = tasksToCheck.filter(t => t.goal_id === goal.id);
-        // If any linked task is uncompleted, revert the goal
-        if (linkedTasks.length > 0 && !linkedTasks.every(t => t.is_completed)) {
+        const linkedHabits = habitsToCheck.filter(h => h.goal_ids?.includes(goal.id));
+        
+        const anyTaskUncompleted = linkedTasks.some(t => !t.is_completed);
+        const anyHabitUncompletedToday = linkedHabits.some(h => !h.is_completed_today);
+        
+        if (anyTaskUncompleted || anyHabitUncompletedToday) {
           goalsToRevert.push(goal.id);
         }
       }
@@ -381,13 +410,6 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
                 {/* Actions on hover */}
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                   <button
-                    onClick={() => handleMarkComplete(goal)}
-                    className="p-1.5 hover:bg-[#22c55e]/20 rounded-[6px] text-[#8b949e] hover:text-[#22c55e] transition-all"
-                    title="Mark goal complete"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                  </button>
-                  <button
                     onClick={() => handleEdit(goal)}
                     className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#7c79ff] transition-all"
                     title="Edit goal"
@@ -404,29 +426,29 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
                 </div>
               </div>
 
-              {/* Progress bar section */}
-              {(goalProgress[goal.id]?.total || 0) > 0 && (
-                <div className="pt-4 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">Progress</span>
-                    <span className="text-[11px] font-semibold text-[#c7c4d7]">{goalProgress[goal.id]?.completed}/{goalProgress[goal.id]?.total}</span>
-                  </div>
-                  <div className="w-full bg-[#222a3d] rounded-full h-2 overflow-hidden border border-[#ffffff08]">
-                    <div
-                      className="h-full bg-gradient-to-r from-[#7c79ff] to-[#60a5fa] transition-all duration-500"
-                      style={{
-                        width: `${goalProgress[goal.id]?.total ? (goalProgress[goal.id]!.completed / goalProgress[goal.id]!.total) * 100 : 0}%`,
-                      }}
-                    />
-                  </div>
-                  {/* Auto-complete indicator */}
-                  {goalProgress[goal.id]?.completed === goalProgress[goal.id]?.total && goalProgress[goal.id]!.total > 0 && (
-                    <div className="pt-2 text-center">
-                      <p className="text-[11px] text-[#22c55e] font-semibold animate-pulse">✓ All tasks complete - Goal will mark complete</p>
-                    </div>
-                  )}
+              {/* Progress bar section - always show */}
+              <div className="pt-4 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">Progress</span>
+                  <span className="text-[11px] font-semibold text-[#c7c4d7]">
+                    {goalProgress[goal.id]?.completed || 0}/{goalProgress[goal.id]?.total || 0}
+                  </span>
                 </div>
-              )}
+                <div className="w-full bg-[#222a3d] rounded-full h-2 overflow-hidden border border-[#ffffff08]">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#7c79ff] to-[#60a5fa] transition-all duration-500"
+                    style={{
+                      width: `${goalProgress[goal.id]?.total ? (goalProgress[goal.id]!.completed / goalProgress[goal.id]!.total) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
+                {/* Auto-complete indicator */}
+                {goalProgress[goal.id] && goalProgress[goal.id].completed === goalProgress[goal.id].total && goalProgress[goal.id].total > 0 && (
+                  <div className="pt-2 text-center">
+                    <p className="text-[11px] text-[#22c55e] font-semibold animate-pulse">✓ All items complete</p>
+                  </div>
+                )}
+              </div>
 
               {/* Deadline section */}
               {daysLeft !== null && (
@@ -455,7 +477,12 @@ export default function Goals({ forceNew, onFormOpened }: GoalsProps) {
             {metrics.completedGoals.map(goal => (
               <div
                 key={goal.id}
-                className="group bg-[#0f1520] border border-[#ffffff05] rounded-[12px] p-4 flex items-center justify-between opacity-60 hover:opacity-80 transition-all"
+                id={`goal-${goal.id}`}
+                className={`group bg-[#0f1520] border border-[#ffffff05] rounded-[12px] p-4 flex items-center justify-between transition-all ${
+                  highlightId === goal.id 
+                    ? 'border-[#7c79ff] ring-2 ring-[#7c79ff]/30 bg-[#1c2540] shadow-[0_0_20px_rgba(124,121,255,0.3)]' 
+                    : 'opacity-60 hover:opacity-80'
+                }`}
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <CheckCircle className="w-4 h-4 text-[#22c55e] shrink-0" />

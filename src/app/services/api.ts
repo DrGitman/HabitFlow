@@ -1,6 +1,6 @@
 /**
  * API Service for Habit Tracker
- * Connects to Python Flask backend
+ * Connects to FastAPI backend
  */
 
 // Replace with your actual backend URL
@@ -28,7 +28,7 @@ class ApiService {
     return headers;
   }
 
-  private async request<T>(
+  public async request<T>(
     endpoint: string,
     options: RequestOptions = {}
   ): Promise<T> {
@@ -92,8 +92,9 @@ class ApiService {
   }
 
   // Habits
-  async getHabits() {
-    return this.request('/api/habits');
+  async getHabits(date?: string) {
+    const params = date ? `?date=${date}` : '';
+    return this.request(`/api/habits${params}`);
   }
 
   async createHabit(data: any) {
@@ -123,6 +124,13 @@ class ApiService {
     });
   }
 
+  async uncompleteHabit(id: number, date?: string) {
+    const params = date ? `?date=${date}` : '';
+    return this.request(`/api/habits/${id}/complete${params}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Tasks
   async getTasks(completed?: boolean) {
     const params = completed !== undefined ? `?completed=${completed}` : '';
@@ -149,10 +157,10 @@ class ApiService {
     });
   }
 
-  async completeTask(id: number, isCompleted: boolean = true) {
+  async completeTask(id: number, isCompleted: boolean = true, date?: string) {
     return this.request(`/api/tasks/${id}/complete`, {
       method: 'POST',
-      body: JSON.stringify({ is_completed: isCompleted }),
+      body: JSON.stringify({ is_completed: isCompleted, date }),
     });
   }
 
@@ -189,20 +197,24 @@ class ApiService {
   }
 
   // Analytics
-  async getAnalyticsSummary() {
-    return this.request('/api/analytics/summary');
+  async getAnalyticsSummary(date?: string) {
+    const params = date ? `?date=${date}` : '';
+    return this.request(`/api/analytics/summary${params}`);
   }
 
-  async getAnalyticsProgress() {
-    return this.request('/api/analytics/progress');
+  async getAnalyticsProgress(date?: string) {
+    const params = date ? `?date=${date}` : '';
+    return this.request(`/api/analytics/progress${params}`);
   }
 
-  async getAnalyticsStreaks() {
-    return this.request('/api/analytics/streaks');
+  async getAnalyticsStreaks(date?: string) {
+    const params = date ? `?date=${date}` : '';
+    return this.request(`/api/analytics/streaks${params}`);
   }
 
-  async getAnalyticsMetrics() {
-    return this.request('/api/analytics/metrics');
+  async getAnalyticsMetrics(date?: string) {
+    const params = date ? `?date=${date}` : '';
+    return this.request(`/api/analytics/metrics${params}`);
   }
 
   async getCalendarData(startDate?: string, endDate?: string) {
@@ -268,8 +280,13 @@ class ApiService {
     });
   }
 
+  // Notifications
   async getNotifications() {
     return this.request('/api/notifications');
+  }
+
+  async getUnreadNotifications() {
+    return this.request('/api/notifications/unread');
   }
 
   async markNotificationAsRead(id: number) {
@@ -353,7 +370,18 @@ class ApiService {
     return this.request('/api/focus-sessions/today');
   }
 
-  // Goal Linking
+  async syncHabitGoals(habitId: number, goalIds: number[]) {
+    return this.request(`/api/habits/${habitId}/goals`, {
+      method: 'PUT',
+      body: JSON.stringify({ goal_ids: goalIds }),
+    });
+  }
+
+  async getHabitGoals(habitId: number) {
+    return this.request(`/api/habits/${habitId}/goals`);
+  }
+
+  // Goal Linking (Deprecated/Alternative)
   async linkHabitToGoal(goalId: number, habitId: number) {
     return this.request(`/api/goals/${goalId}/link-habit`, {
       method: 'POST',

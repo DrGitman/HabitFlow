@@ -405,16 +405,62 @@ export default function Profile() {
           ) : (
             achievements.slice(0, 3).map((achievement, i) => {
               const Icon = getIcon(achievement.icon);
+              const isEpic = achievement.type.toLowerCase().includes('master') || achievement.type.toLowerCase().includes('legend');
+              const isRare = achievement.type.toLowerCase().includes('architect') || achievement.type.toLowerCase().includes('advanced');
+              const rarityLabel = isEpic ? 'Epic' : isRare ? 'Rare' : 'Common';
+              const rarityColor = isEpic ? '#bc8cff' : isRare ? '#7c79ff' : '#8b949e';
+              
               return (
-                <div key={i} className="bg-[#1e2433] rounded-[16px] p-7 transition-all relative overflow-hidden" style={{ borderBottom: `2.5px solid ${achievement.color}` }}>
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="p-2.5 rounded-[12px] bg-[#161b22] border border-[#ffffff0a] group-hover:border-white/20 transition-all">
-                      <Icon className="w-5 h-5" style={{ color: achievement.color }} />
-                    </div>
-                    <span className="text-[9px] font-black tracking-[0.2em] text-[#8b949e] bg-[#161b22] px-2.5 py-1 rounded-full border border-[#ffffff0a]">{achievement.type}</span>
+                <div 
+                  key={i} 
+                  className="group relative bg-[#161b22]/40 backdrop-blur-md border border-[#ffffff0a] rounded-[24px] p-8 overflow-hidden transition-all duration-500 hover:-translate-y-2 hover:border-[#ffffff1a] hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+                >
+                  {/* Gloss Effect */}
+                  <div className="absolute -top-24 -right-24 w-48 h-48 bg-white/5 rounded-full blur-3xl group-hover:bg-white/10 transition-all duration-700" />
+                  
+                  {/* Rarity Badge */}
+                  <div className="absolute top-6 right-6 flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 border border-[#ffffff0a]">
+                    <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: rarityColor }} />
+                    <span className="text-[10px] font-black uppercase tracking-[0.1em]" style={{ color: rarityColor }}>{rarityLabel}</span>
                   </div>
-                  <h4 className="text-[#ffffff] text-[18px] font-bold mb-2">{achievement.title}</h4>
-                  <p className="text-[#8b949e] text-[12px] leading-relaxed font-medium">{achievement.desc}</p>
+
+                  <div className="relative z-10">
+                    <div 
+                      className="w-14 h-14 rounded-[18px] bg-[#0d1117] border border-[#ffffff0a] flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-500 shadow-inner"
+                      style={{ boxShadow: `inset 0 0 20px ${achievement.color}15` }}
+                    >
+                      <Icon className="w-6 h-6" style={{ color: achievement.color }} />
+                    </div>
+                    
+                    <h4 className="text-[#ffffff] text-[20px] font-black tracking-tight mb-2 group-hover:text-[#7c79ff] transition-colors">{achievement.title}</h4>
+                    <p className="text-[#8b949e] text-[13px] leading-relaxed font-medium mb-6 opacity-80 group-hover:opacity-100 transition-opacity">
+                      {achievement.desc}
+                    </p>
+
+                    {/* Performance Progress Bar (Visual Mock) */}
+                    <div className="space-y-2">
+                       <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-[#8b949e] opacity-40">
+                         <span>Affinity</span>
+                         <span style={{ color: achievement.color }}>100%</span>
+                       </div>
+                       <div className="h-1.5 w-full bg-[#0d1117] rounded-full overflow-hidden p-[1px]">
+                         <div 
+                           className="h-full rounded-full transition-all duration-1000 ease-out"
+                           style={{ 
+                             width: '100%', 
+                             backgroundColor: achievement.color,
+                             boxShadow: `0 0 10px ${achievement.color}40`
+                           }}
+                         />
+                       </div>
+                    </div>
+                  </div>
+
+                  {/* Atmospheric Glow */}
+                  <div 
+                    className="absolute bottom-0 left-0 right-0 h-[3px] opacity-20 blur-[2px]" 
+                    style={{ backgroundColor: achievement.color }} 
+                  />
                 </div>
               );
             })
@@ -426,12 +472,12 @@ export default function Profile() {
       <div className="bg-[#0b101a] rounded-[16px] py-14 flex flex-col md:flex-row items-center justify-between px-16 mt-8">
         <div className="flex-1 flex flex-col items-center justify-center text-center group relative">
            <span className="text-[64px] font-bold text-[#e6edf3] tracking-tight leading-none transition-transform duration-500">{summary?.completion_rate || 0}<span className="text-[32px] font-semibold">%</span></span>
-           <p className="text-[#8b949e] text-[11px] font-bold uppercase tracking-[0.2em] mt-3 opacity-80">Efficiency Rate</p>
+           <p className="text-[#8b949e] text-[11px] font-bold uppercase tracking-[0.2em] mt-3 opacity-80">Success Rate</p>
            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[1px] h-16 bg-[#ffffff1a] hidden md:block" />
         </div>
         <div className="flex-1 flex flex-col items-center justify-center text-center group relative">
            <span className="text-[64px] font-bold text-[#e6edf3] tracking-tight leading-none transition-transform duration-500">{(summary?.completed_tasks || 0).toLocaleString()}</span>
-           <p className="text-[#8b949e] text-[11px] font-bold uppercase tracking-[0.2em] mt-3 opacity-80">Completed Nodes</p>
+           <p className="text-[#8b949e] text-[11px] font-bold uppercase tracking-[0.2em] mt-3 opacity-80">Milestones</p>
            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[1px] h-16 bg-[#ffffff1a] hidden md:block" />
         </div>
         <div className="flex-1 flex flex-col items-center justify-center text-center group">

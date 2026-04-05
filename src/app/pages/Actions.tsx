@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router';
+import { useSearchParams, useLocation } from 'react-router';
 import { CheckSquare, Trophy, RefreshCw } from 'lucide-react';
 import Tasks from './Tasks';
 import Goals from './Goals';
@@ -15,36 +15,54 @@ const tabs: { id: Tab; label: string; Icon: React.ElementType }[] = [
 
 export default function Actions() {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>('tasks');
   const [forceNew, setForceNew] = useState(false);
+  const [highlightId, setHighlightId] = useState<number | null>(null);
 
   useEffect(() => {
-    const tab = searchParams.get('tab');
+    const tabFromUrl = searchParams.get('tab');
     const newType = searchParams.get('new');
+    const state = location.state as { highlightId?: number; type?: string } | null;
     
-    if (tab === 'tasks' || tab === 'goals' || tab === 'habits') {
-      setActiveTab(tab);
+    // Handle specific item highlighting from search
+    if (state?.highlightId && state?.type) {
+      setHighlightId(state.highlightId);
+      if (state.type === 'task') setActiveTab('tasks');
+      if (state.type === 'habit') setActiveTab('habits');
+      if (state.type === 'goal') setActiveTab('goals');
+      // Clear state after reading to prevent re-highlighting on tab switch
+      window.history.replaceState(null, '');
+      return; // Exit early as state takes precedence
+    }
+
+    if (tabFromUrl === 'tasks' || tabFromUrl === 'goals' || tabFromUrl === 'habits') {
+      setActiveTab(tabFromUrl);
     }
     
     // Handle quick add from navigation
     if (newType === 'task') {
       setActiveTab('tasks');
       setForceNew(true);
-      window.history.replaceState(null, '', '/actions');
+      window.history.replaceState(null, '');
     } else if (newType === 'goal') {
       setActiveTab('goals');
       setForceNew(true);
-      window.history.replaceState(null, '', '/actions');
+      window.history.replaceState(null, '');
     } else if (newType === 'habit') {
       setActiveTab('habits');
       setForceNew(true);
-      window.history.replaceState(null, '', '/actions');
+      window.history.replaceState(null, '');
     }
-  }, [searchParams]);
+  }, [searchParams, location.state]);
 
   // Callback to reset forceNew after child component uses it
   const handleFormOpened = () => {
     setForceNew(false);
+  };
+
+  const handleHighlightReset = () => {
+    setHighlightId(null);
   };
 
   return (
@@ -75,9 +93,9 @@ export default function Actions() {
             aligns flush inside the grid column, identical to how Settings works. */}
         <div className="col-span-3 w-full overflow-hidden">
           <div className="-mx-8 -mt-8">
-            {activeTab === 'tasks'  && <Tasks forceNew={forceNew} onFormOpened={handleFormOpened} />}
-            {activeTab === 'goals'  && <Goals forceNew={forceNew} onFormOpened={handleFormOpened} />}
-            {activeTab === 'habits' && <Habits forceNew={forceNew} onFormOpened={handleFormOpened} />}
+            {activeTab === 'tasks'  && <Tasks highlightId={highlightId} onHighlightReset={handleHighlightReset} forceNew={forceNew} onFormOpened={handleFormOpened} />}
+            {activeTab === 'goals'  && <Goals highlightId={highlightId} onHighlightReset={handleHighlightReset} forceNew={forceNew} onFormOpened={handleFormOpened} />}
+            {activeTab === 'habits' && <Habits highlightId={highlightId} onHighlightReset={handleHighlightReset} forceNew={forceNew} onFormOpened={handleFormOpened} />}
           </div>
         </div>
 
