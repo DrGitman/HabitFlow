@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { CustomToast } from './ui/CustomToast';
@@ -6,25 +6,36 @@ import { useAuth } from '../context/AuthContext';
 
 export const RealTimeNotifications = () => {
   const { isAuthenticated } = useAuth();
-  const lastCheckedRef = useRef<number>(Date.now());
   const processedIds = useRef<Set<number>>(new Set());
+  const [prefs, setPrefs] = useState<any>(null);
 
   useEffect(() => {
     // Request notification permission on mount
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
-  }, []);
+
+    if (isAuthenticated) {
+      api.getUserPreferences().then(setPrefs).catch(console.error);
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !prefs) return;
 
     const showSystemNotification = (notification: any) => {
+      // Respect the global desktop notifications setting
+      if (!prefs.desktop_notifications) return;
+
+      // Filter by type if needed
+      if (notification.type === 'achievement' && !prefs.notification_achievements) return;
+      if (notification.type === 'reminder' && !prefs.notification_reminders) return;
+
       if ('Notification' in window && Notification.permission === 'granted') {
         try {
           new Notification(notification.title, {
             body: notification.message,
-            icon: '/src/assets/logo.png', // Fallback to logo
+            icon: '/src/assets/logo.png',
             tag: `notification-${notification.id}`,
             silent: false
           });
@@ -40,7 +51,7 @@ export const RealTimeNotifications = () => {
         if (unread && Array.isArray(unread)) {
           unread.forEach((notification: any) => {
             if (!processedIds.current.has(notification.id)) {
-              // 1. Show the in-app toast
+              // 1. Show the in-app toast (always show this as it's part of the app UI)
               toast.custom((t) => (
                 <CustomToast 
                   title={notification.title} 
@@ -50,7 +61,7 @@ export const RealTimeNotifications = () => {
                 />
               ), { duration: 5000 });
 
-              // 2. Show the system notification (cross-platform)
+              // 2. Show the system notification (respecting preferences)
               showSystemNotification(notification);
               
               // 3. Mark as read immediately to stop polling it
@@ -69,7 +80,7 @@ export const RealTimeNotifications = () => {
     checkNotifications();
     const interval = setInterval(checkNotifications, 5000);
     return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, prefs]);
 
   return null;
 };

@@ -405,6 +405,18 @@ class ApiService {
   async getLinkedHabits(goalId: number) {
     return this.request(`/api/goals/${goalId}/linked-habits`);
   }
+
+  // User Preferences
+  async getUserPreferences() {
+    return this.request('/api/preferences');
+  }
+
+  async updateUserPreferences(data: any) {
+    return this.request('/api/preferences', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 export const api = new ApiService();

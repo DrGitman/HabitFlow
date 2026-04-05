@@ -83,6 +83,15 @@ class FocusSessionStart(BaseModel):
 class FocusSessionComplete(BaseModel):
     task_completed: bool = False
 
+class UserPreferences(BaseModel):
+    dark_mode: Optional[bool] = None
+    desktop_notifications: Optional[bool] = None
+    weekly_summary_emails: Optional[bool] = None
+    notification_reminders: Optional[bool] = None
+    notification_achievements: Optional[bool] = None
+    profile_visibility: Optional[str] = None
+    anonymous_analytics: Optional[bool] = None
+
 # --- Security & Auth ---
 
 def create_token(user_id: int):
@@ -120,6 +129,10 @@ async def signup(data: UserSignup):
 
     password_hash = bcrypt.hashpw(data.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     user = User.create(data.email, password_hash, data.full_name)
+    
+    # Initialize user preferences
+    execute_query("INSERT INTO user_preferences (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user['id'],))
+    
     token = create_token(user['id'])
 
     return {
@@ -1255,6 +1268,39 @@ async def get_today_sessions(user_id: int = Depends(get_current_user_id)):
     """Get all focus sessions created today"""
     sessions = FocusSession.get_today_sessions(user_id)
     return sessions
+
+# --- User Preferences Endpoints ---
+
+@app.get("/api/preferences")
+async def get_preferences(user_id: int = Depends(get_current_user_id)):
+    prefs = execute_query("SELECT * FROM user_preferences WHERE user_id = %s", (user_id,))
+    if not prefs:
+        # Fallback create if somehow missing
+        execute_query("INSERT INTO user_preferences (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user_id,))
+        prefs = execute_query("SELECT * FROM user_preferences WHERE user_id = %s", (user_id,))
+    
+    return prefs[0] if prefs else {}
+
+@app.patch("/api/preferences")
+async def update_preferences(data: UserPreferences, user_id: int = Depends(get_current_user_id)):
+    update_data = data.dict(exclude_unset=True)
+    if not update_data:
+        return {"message": "No changes provided"}
+    
+    fields = []
+    values = []
+    for k, v in update_data.items():
+        fields.append(f"{k} = %s")
+        values.append(v)
+    
+    values.append(user_id)
+    query = f"UPDATE user_preferences SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE user_id = %s RETURNING *"
+    
+    updated = execute_query(query, tuple(values))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Preferences not found")
+        
+    return updated[0]
 
 if __name__ == "__main__":
     import uvicorn

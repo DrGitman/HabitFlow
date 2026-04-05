@@ -1,158 +1,291 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Settings as SettingsIcon, 
   Bell, 
   Lock, 
   Monitor, 
   Mail, 
-  Moon
+  Moon,
+  Shield,
+  Zap,
+  Clock,
+  Trophy,
+  Loader2
 } from 'lucide-react';
+import { api } from '../services/api';
+import { toast } from 'sonner';
+
+interface Preferences {
+  dark_mode: boolean;
+  desktop_notifications: boolean;
+  weekly_summary_emails: boolean;
+  notification_reminders: boolean;
+  notification_achievements: boolean;
+  privacy_show_rank: boolean;
+  privacy_share_stats: boolean;
+}
+
+const Toggle = ({ active, onClick, loading }: { active: boolean; onClick: () => void; loading?: boolean }) => (
+  <button 
+    onClick={onClick}
+    disabled={loading}
+    className="relative shrink-0 flex items-center group focus:outline-none"
+  >
+    <div className={`h-[24px] rounded-[9999px] w-[44px] transition-all duration-300 ${active ? 'bg-[#7c79ff]' : 'bg-[#2d3449]'}`} />
+    <div className={`absolute bg-white rounded-[9999px] w-[18px] h-[18px] top-[3px] shadow-sm transition-all duration-300 ${active ? 'left-[23px]' : 'left-[3px]'}`}>
+      {loading && <Loader2 className="w-full h-full p-1 text-[#7c79ff] animate-spin" />}
+    </div>
+  </button>
+);
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
+  const [prefs, setPrefs] = useState<Preferences | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [updatingField, setUpdatingField] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchPreferences();
+  }, []);
+
+  const fetchPreferences = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getUserPreferences();
+      setPrefs(data as Preferences);
+    } catch (error) {
+      console.error('Failed to fetch preferences:', error);
+      toast.error('Could not load settings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const togglePreference = async (key: keyof Preferences) => {
+    if (!prefs) return;
+    
+    const newValue = !prefs[key];
+    setUpdatingField(key);
+    
+    try {
+      const updated = await api.updateUserPreferences({ [key]: newValue });
+      setPrefs(updated as Preferences);
+      
+      // Special logic for theme
+      if (key === 'dark_mode') {
+        if (!newValue) document.body.classList.add('light-theme');
+        else document.body.classList.remove('light-theme');
+      }
+
+      toast.success('Settings updated');
+    } catch (error) {
+      console.error('Update failed:', error);
+      toast.error('Failed to save change');
+    } finally {
+      setUpdatingField(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <Loader2 className="w-8 h-8 text-[#7c79ff] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-10 max-w-[1200px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 font-['Inter']">
-
       <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mt-4">
-        {/* Vertical Settings Navigation */}
+        {/* Navigation */}
         <div className="col-span-1 flex flex-col gap-[8px] items-start self-start w-full">
-          <button 
-            onClick={() => setActiveTab('general')}
-            className={`w-full flex items-center gap-[12px] px-[16px] py-[12px] rounded-[12px] transition-all text-[14px] ${
-              activeTab === 'general' ? 'bg-[#222a3d] text-[#c2c1ff] font-semibold' : 'text-[#c7c4d7] hover:bg-[#222a3d]/50 font-normal'
-            }`}
-          >
-            <SettingsIcon className="w-[15px] h-[15px]" />
-            <span className="leading-[20px]">General</span>
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('notifications')}
-            className={`w-full flex items-center gap-[12px] px-[16px] py-[12px] rounded-[12px] transition-all text-[14px] ${
-              activeTab === 'notifications' ? 'bg-[#222a3d] text-[#c2c1ff] font-semibold' : 'text-[#c7c4d7] hover:bg-[#222a3d]/50 font-normal'
-            }`}
-          >
-            <Bell className="w-[16px] h-[16px]" />
-            <span className="leading-[20px]">Notifications</span>
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('privacy')}
-            className={`w-full flex items-center gap-[12px] px-[16px] py-[12px] rounded-[12px] transition-all text-[14px] ${
-              activeTab === 'privacy' ? 'bg-[#222a3d] text-[#c2c1ff] font-semibold' : 'text-[#c7c4d7] hover:bg-[#222a3d]/50 font-normal'
-            }`}
-          >
-            <Lock className="w-[13px] h-[16px]" />
-            <span className="leading-[20px]">Privacy</span>
-          </button>
+          {[
+            { id: 'general', label: 'General', Icon: SettingsIcon },
+            { id: 'notifications', label: 'Notifications', Icon: Bell },
+            { id: 'privacy', label: 'Privacy', Icon: Lock },
+          ].map(({ id, label, Icon }) => (
+            <button 
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`w-full flex items-center gap-[12px] px-[16px] py-[12px] rounded-[12px] transition-all text-[14px] ${
+                activeTab === id ? 'bg-[#222a3d] text-[#c2c1ff] font-semibold' : 'text-[#8b949e] hover:bg-[#222a3d]/50 font-normal hover:text-[#e6edf3]'
+              }`}
+            >
+              <Icon className="w-[15px] h-[15px]" />
+              <span className="leading-[20px]">{label}</span>
+            </button>
+          ))}
         </div>
 
-        {/* Content Area */}
+        {/* Content */}
         <div className="col-span-3 w-full">
-          {activeTab === 'general' && (
+          {activeTab === 'general' && prefs && (
             <div className="flex flex-col gap-[32px] items-start w-full">
               <div className="flex flex-col gap-[4px] items-start w-full">
-                <h2 className="text-[#dae2fd] text-[24px] font-semibold tracking-[-0.6px] leading-[32px]">
-                  General Preferences
-                </h2>
-                <p className="text-[#c7c4d7] text-[14px] font-normal leading-[20px]">
-                  Configure your core application experience.
-                </p>
+                <h2 className="text-[#dae2fd] text-[24px] font-bold tracking-tight">General Preferences</h2>
+                <p className="text-[#8b949e] text-[14px] font-medium opacity-60">Configure your core application experience.</p>
               </div>
 
               <div className="flex flex-col gap-[16px] w-full">
-                {/* Dark mode */}
-                <div className="bg-[#171f33] rounded-[12px] w-full">
-                  <div className="flex items-center justify-between p-[24px] w-full">
-                    <div className="flex gap-[16px] items-center">
-                      <div className="bg-[#222a3d] flex items-center justify-center rounded-[8px] w-[40px] h-[40px] shrink-0">
-                        <Moon className="w-[18px] h-[18px] text-[#c2c1ff]" />
+                {/* Dark Mode */}
+                <div className="bg-[#161b22] border border-[#ffffff0a] rounded-[20px] p-6 hover:border-[#7c79ff40] transition-all group">
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-4 items-center">
+                      <div className="bg-[#1c2128] border border-[#ffffff0a] p-2.5 rounded-[12px] group-hover:border-[#7c79ff40] transition-all">
+                        <Moon className="w-5 h-5 text-[#7c79ff]" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-[#dae2fd] text-[16px] font-medium leading-[24px]">Dark mode</span>
-                        <span className="text-[#c7c4d7] text-[12px] font-normal leading-[16px]">Switch between light and dark visual themes</span>
+                        <span className="text-[#e6edf3] text-[15px] font-bold">Dark mode</span>
+                        <span className="text-[#8b949e] text-[12px] font-medium">Switch between light and dark visual themes</span>
                       </div>
                     </div>
-                    {/* Toggle Active */}
-                    <div className="relative shrink-0 flex items-center">
-                      <div className="bg-[#c2c1ff] h-[24px] rounded-[9999px] w-[44px]" />
-                      <div className="absolute bg-white left-[22px] rounded-[9999px] w-[20px] h-[20px] top-[2px] shadow-sm" />
-                    </div>
+                    <Toggle 
+                      active={prefs.dark_mode} 
+                      onClick={() => togglePreference('dark_mode')} 
+                      loading={updatingField === 'dark_mode'} 
+                    />
                   </div>
                 </div>
 
-                {/* Desktop notifications */}
-                <div className="bg-[#171f33] rounded-[12px] w-full">
-                  <div className="flex items-center justify-between p-[24px] w-full">
-                    <div className="flex gap-[16px] items-center">
-                      <div className="bg-[#222a3d] flex items-center justify-center rounded-[8px] w-[40px] h-[40px] shrink-0">
-                        <Monitor className="w-[20px] h-[18px] text-[#c2c1ff]" />
+                {/* Desktop Notifications */}
+                <div className="bg-[#161b22] border border-[#ffffff0a] rounded-[20px] p-6 hover:border-[#7c79ff40] transition-all group">
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-4 items-center">
+                      <div className="bg-[#1c2128] border border-[#ffffff0a] p-2.5 rounded-[12px] group-hover:border-[#7c79ff40] transition-all">
+                        <Monitor className="w-5 h-5 text-[#bc8cff]" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-[#dae2fd] text-[16px] font-medium leading-[24px]">Desktop notifications</span>
-                        <span className="text-[#c7c4d7] text-[12px] font-normal leading-[16px]">Receive alerts directly on your operating system</span>
+                        <span className="text-[#e6edf3] text-[15px] font-bold">Desktop notifications</span>
+                        <span className="text-[#8b949e] text-[12px] font-medium">Receive alerts directly on your operating system</span>
                       </div>
                     </div>
-                    {/* Toggle Inactive */}
-                    <div className="relative shrink-0 flex items-center">
-                      <div className="bg-[#2d3449] h-[24px] rounded-[9999px] w-[44px]" />
-                      <div className="absolute bg-white left-[2px] rounded-[9999px] w-[20px] h-[20px] top-[2px] border border-[#d1d5db]" />
-                    </div>
+                    <Toggle 
+                      active={prefs.desktop_notifications} 
+                      onClick={() => togglePreference('desktop_notifications')} 
+                      loading={updatingField === 'desktop_notifications'} 
+                    />
                   </div>
                 </div>
 
-                {/* Weekly summary emails */}
-                <div className="bg-[#171f33] rounded-[12px] w-full">
-                  <div className="flex items-center justify-between p-[24px] w-full">
-                    <div className="flex gap-[16px] items-center">
-                      <div className="bg-[#222a3d] flex items-center justify-center rounded-[8px] w-[40px] h-[40px] shrink-0">
-                        <Mail className="w-[20px] h-[16px] text-[#c2c1ff]" />
+                {/* Weekly Emails */}
+                <div className="bg-[#161b22] border border-[#ffffff0a] rounded-[20px] p-6 hover:border-[#7c79ff40] transition-all group">
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-4 items-center">
+                      <div className="bg-[#1c2128] border border-[#ffffff0a] p-2.5 rounded-[12px] group-hover:border-[#7c79ff40] transition-all">
+                        <Mail className="w-5 h-5 text-[#39d353]" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-[#dae2fd] text-[16px] font-medium leading-[24px]">Weekly summary emails</span>
-                        <span className="text-[#c7c4d7] text-[12px] font-normal leading-[16px]">A comprehensive report of your habit streaks every Monday</span>
+                        <span className="text-[#e6edf3] text-[15px] font-bold">Weekly summary emails</span>
+                        <span className="text-[#8b949e] text-[12px] font-medium">A comprehensive report of your habit streaks every Monday</span>
                       </div>
                     </div>
-                    {/* Toggle Active */}
-                    <div className="relative shrink-0 flex items-center">
-                      <div className="bg-[#c2c1ff] h-[24px] rounded-[9999px] w-[44px]" />
-                      <div className="absolute bg-white left-[22px] rounded-[9999px] w-[20px] h-[20px] top-[2px] shadow-sm" />
-                    </div>
+                    <Toggle 
+                      active={prefs.weekly_summary_emails} 
+                      onClick={() => togglePreference('weekly_summary_emails')} 
+                      loading={updatingField === 'weekly_summary_emails'} 
+                    />
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {activeTab === 'notifications' && (
-            <div className="flex flex-col gap-[32px] items-start w-full">
-               <div className="flex flex-col gap-[4px] items-start w-full">
-                <h2 className="text-[#dae2fd] text-[24px] font-semibold tracking-[-0.6px] leading-[32px]">
-                  Notifications
-                </h2>
-                <p className="text-[#c7c4d7] text-[14px] font-normal leading-[20px]">
-                  Manage how we contact you.
-                </p>
+          {activeTab === 'notifications' && prefs && (
+             <div className="flex flex-col gap-[32px] items-start w-full">
+              <div className="flex flex-col gap-[4px] items-start w-full">
+                <h2 className="text-[#dae2fd] text-[24px] font-bold tracking-tight">Notification Channels</h2>
+                <p className="text-[#8b949e] text-[14px] font-medium opacity-60">Manage how we contact you for internal updates.</p>
               </div>
-              <div className="bg-[#171f33] rounded-[12px] w-full p-[24px]">
-                <p className="text-[#c7c4d7] text-[14px]">Notification settings are currently managed globally.</p>
+
+              <div className="flex flex-col gap-[16px] w-full">
+                {/* Reminders */}
+                <div className="bg-[#161b22] border border-[#ffffff0a] rounded-[20px] p-6 hover:border-[#7c79ff40] transition-all group">
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-4 items-center">
+                      <div className="bg-[#1c2128] border border-[#ffffff0a] p-2.5 rounded-[12px] group-hover:border-[#7c79ff40] transition-all">
+                        <Clock className="w-5 h-5 text-[#7c79ff]" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[#e6edf3] text-[15px] font-bold">Task & Habit Reminders</span>
+                        <span className="text-[#8b949e] text-[12px] font-medium">Get nudged when your scheduled activities are due</span>
+                      </div>
+                    </div>
+                    <Toggle 
+                      active={prefs.notification_reminders} 
+                      onClick={() => togglePreference('notification_reminders')} 
+                      loading={updatingField === 'notification_reminders'} 
+                    />
+                  </div>
+                </div>
+
+                {/* Achievements */}
+                <div className="bg-[#161b22] border border-[#ffffff0a] rounded-[20px] p-6 hover:border-[#7c79ff40] transition-all group">
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-4 items-center">
+                      <div className="bg-[#1c2128] border border-[#ffffff0a] p-2.5 rounded-[12px] group-hover:border-[#7c79ff40] transition-all">
+                        <Trophy className="w-5 h-5 text-[#f1e05a]" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[#e6edf3] text-[15px] font-bold">Achievement Alerts</span>
+                        <span className="text-[#8b949e] text-[12px] font-medium">Notifications when you unlock new medals or milestones</span>
+                      </div>
+                    </div>
+                    <Toggle 
+                      active={prefs.notification_achievements} 
+                      onClick={() => togglePreference('notification_achievements')} 
+                      loading={updatingField === 'notification_achievements'} 
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
-          {activeTab === 'privacy' && (
+          {activeTab === 'privacy' && prefs && (
             <div className="flex flex-col gap-[32px] items-start w-full">
               <div className="flex flex-col gap-[4px] items-start w-full">
-                <h2 className="text-[#dae2fd] text-[24px] font-semibold tracking-[-0.6px] leading-[32px]">
-                  Privacy
-                </h2>
-                <p className="text-[#c7c4d7] text-[14px] font-normal leading-[20px]">
-                  Manage your data and privacy settings.
-                </p>
+                <h2 className="text-[#dae2fd] text-[24px] font-bold tracking-tight">Privacy Settings</h2>
+                <p className="text-[#8b949e] text-[14px] font-medium opacity-60">Manage your data exposure and profile visibility.</p>
               </div>
-              <div className="bg-[#171f33] rounded-[12px] w-full p-[24px]">
-                <p className="text-[#c7c4d7] text-[14px]">Your data is encrypted and secure.</p>
+
+              <div className="flex flex-col gap-[16px] w-full">
+                <div className="bg-[#161b22] border border-[#ffffff0a] rounded-[20px] p-6 hover:border-[#7c79ff40] transition-all group">
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-4 items-center">
+                      <div className="bg-[#1c2128] border border-[#ffffff0a] p-2.5 rounded-[12px] group-hover:border-[#7c79ff40] transition-all">
+                        <Shield className="w-5 h-5 text-[#7c79ff]" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[#e6edf3] text-[15px] font-bold">Show Rank on Profile</span>
+                        <span className="text-[#8b949e] text-[12px] font-medium">Allow other users to see your global architect rank</span>
+                      </div>
+                    </div>
+                    <Toggle 
+                      active={prefs.privacy_show_rank} 
+                      onClick={() => togglePreference('privacy_show_rank')} 
+                      loading={updatingField === 'privacy_show_rank'} 
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-[#161b22] border border-[#ffffff0a] rounded-[20px] p-6 hover:border-[#7c79ff40] transition-all group">
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-4 items-center">
+                      <div className="bg-[#1c2128] border border-[#ffffff0a] p-2.5 rounded-[12px] group-hover:border-[#7c79ff40] transition-all">
+                        <Zap className="w-5 h-5 text-[#f85149]" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[#e6edf3] text-[15px] font-bold">Share Progress Statistics</span>
+                        <span className="text-[#8b949e] text-[12px] font-medium">Contribute anonymized data to global community charts</span>
+                      </div>
+                    </div>
+                    <Toggle 
+                      active={prefs.privacy_share_stats} 
+                      onClick={() => togglePreference('privacy_share_stats')} 
+                      loading={updatingField === 'privacy_share_stats'} 
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}

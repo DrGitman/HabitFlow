@@ -200,7 +200,7 @@ CREATE TABLE IF NOT EXISTS user_preferences (
     weekly_summary_emails BOOLEAN DEFAULT true,
     notification_reminders BOOLEAN DEFAULT true,
     notification_achievements BOOLEAN DEFAULT true,
-    privacy_show_rank BOOLEAN DEFAULT true,
-    privacy_share_stats BOOLEAN DEFAULT false,
+    profile_visibility VARCHAR(20) DEFAULT 'private', -- 'private', 'public'
+    anonymous_analytics BOOLEAN DEFAULT false,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

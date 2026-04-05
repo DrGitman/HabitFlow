@@ -71,6 +71,7 @@ export default function Profile() {
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [prefs, setPrefs] = useState<any>(null);
   
   // Modals state
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -100,19 +101,22 @@ export default function Profile() {
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, [location.pathname]);
+  }, []);
 
   const fetchProfileData = async () => {
     try {
       setLoading(true);
-      const [profileRes, summaryRes, achievementsRes] = await Promise.all([
+      const [profileRes, summaryRes, achievementsRes, prefsRes] = await Promise.all([
         api.getProfile(),
         api.getAnalyticsSummary(),
-        api.getAchievements()
+        api.getAchievements(),
+        api.getUserPreferences()
       ]);
 
       console.log('Profile API Response:', profileRes);
       console.log('User from Auth:', user);
+      
+      setPrefs(prefsRes);
       
       // The API returns the full user profile with all fields
       const prof = profileRes as UserProfile | null;
@@ -300,7 +304,9 @@ export default function Profile() {
             {/* Info Section */}
             <div className="flex-1 text-center md:text-left space-y-6">
               <div>
-                <p className="text-[#7c79ff] text-[10px] font-black uppercase tracking-[0.2em] mb-1">{profile?.rank || 'Beginner'}</p>
+                <p className="text-[#7c79ff] text-[10px] font-black uppercase tracking-[0.2em] mb-1">
+                  {prefs?.privacy_show_rank === false ? 'Private' : (profile?.rank || 'Beginner')}
+                </p>
                 <h1 className="text-[#ffffff] text-[32px] font-black tracking-tight leading-none">{profile?.full_name || 'System User'}</h1>
                 <p className="text-[#8b949e] text-[13px] mt-1 font-medium">{profile?.email}</p>
               </div>
