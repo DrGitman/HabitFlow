@@ -367,6 +367,30 @@
   box-shadow: 0 0 0 1px rgba(8, 11, 18, 0.2);
 }
 
+.light-theme .bg-\[\#ffffff0a\] {
+  background-color: #e2e8f0 !important;
+}
+
+.light-theme .sidebar-nav-link-inactive {
+  background-color: #ffffff !important;
+  color: #727d83 !important;
+}
+
+.light-theme .sidebar-nav-link-inactive .sidebar-nav-link-icon,
+.light-theme .sidebar-nav-link-inactive span {
+  color: #727d83 !important;
+}
+
+.light-theme .sidebar-nav-link-inactive:hover {
+  background-color: #f8fafc !important;
+  color: #727d83 !important;
+}
+
+.light-theme .sidebar-nav-link-inactive:hover .sidebar-nav-link-icon,
+.light-theme .sidebar-nav-link-inactive:hover span {
+  color: #727d83 !important;
+}
+
 /* Toasts */
 .light-theme [data-sonner-toast] [data-content] {
   background-color: #ffffff !important;

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, date
 import jwt
 import bcrypt
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -21,7 +22,7 @@ from models.scheduled_item import ScheduledItem
 from models.notification import Notification
 from db.connection import execute_query
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / '.env')
 
 app = FastAPI(title="Habit Tracker API")
 
@@ -1065,9 +1066,42 @@ async def delete_profile(user_id: int = Depends(get_current_user_id)):
 async def sync_achievements(user_id: int):
     """Internal helper to evaluate and persist achievements"""
     try:
+        execute_query(
+            """
+            INSERT INTO achievements (name, description, type, threshold_value, icon, color, rank_type)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (name) DO NOTHING
+            """,
+            (
+                'Daily Triple',
+                'Complete 3 tasks in a single day',
+                'task_day_count',
+                3,
+                'CheckCircle2',
+                '#39d353',
+                'COMMON'
+            ),
+            fetch_all=False
+        )
+
         summary = await get_analytics_summary(user_id)
         # For streaks, we'll use current date for now, or could pass it if needed
         streaks = await get_analytics_streaks(user_id)
+        goals_metrics = Goal.calculate_all_metrics(user_id)
+        task_day_row = execute_query(
+            """
+            SELECT COALESCE(MAX(task_count), 0) AS max_tasks_day
+            FROM (
+                SELECT DATE(completed_at) AS completed_day, COUNT(*) AS task_count
+                FROM tasks
+                WHERE user_id = %s AND is_completed = true AND completed_at IS NOT NULL
+                GROUP BY DATE(completed_at)
+            ) daily_counts
+            """,
+            (user_id,),
+            fetch_one=True
+        ) or {}
+        max_tasks_day = int(task_day_row.get('max_tasks_day', 0) or 0)
         
         max_streak = 0
         if streaks:
@@ -1088,9 +1122,37 @@ async def sync_achievements(user_id: int):
             elif ach_type == 'task_count':
                 if summary['completed_tasks'] >= thresh:
                     unlocked = True
+            elif ach_type == 'task_day_count':
+                if max_tasks_day >= thresh:
+                    unlocked = True
             elif ach_type == 'consistency':
                 if summary['completion_rate'] >= thresh:
                     unlocked = True
+            elif ach_type == 'goal_count':
+                if goals_metrics['completed_goals'] >= thresh:
+                    unlocked = True
+
+            if unlocked:
+                was_inserted = execute_query(
+                    """
+                    INSERT INTO user_achievements (user_id, achievement_id)
+                    VALUES (%s, %s)
+                    ON CONFLICT (user_id, achievement_id) DO NOTHING
+                    RETURNING id
+                    """,
+                    (user_id, ach['id']),
+                    fetch_one=True
+                )
+
+                if was_inserted:
+                    Notification.create(
+                        user_id=user_id,
+                        type='achievement',
+                        title=f"Achievement unlocked: {ach['name']}",
+                        message=ach.get('description'),
+                        related_entity_type='achievement',
+                        related_entity_id=ach['id']
+                    )
                     
     except Exception as e:
         print(f"Achievement sync error: {e}")
@@ -1485,62 +1547,218 @@ async def update_preferences(data: UserPreferences, user_id: int = Depends(get_c
 # --- Background Scheduler ---
 scheduler = BackgroundScheduler()
 
+def get_previous_week_range(reference_date: Optional[date] = None):
+    today = reference_date or datetime.now().date()
+    week_end = today - timedelta(days=1)
+    week_start = week_end - timedelta(days=6)
+    return week_start, week_end
+
+def format_week_range(week_start: date, week_end: date) -> str:
+    if week_start.year == week_end.year and week_start.month == week_end.month:
+        return f"{week_start.strftime('%b')} {week_start.day} - {week_end.day}, {week_end.year}"
+    if week_start.year == week_end.year:
+        return f"{week_start.strftime('%b')} {week_start.day} - {week_end.strftime('%b')} {week_end.day}, {week_end.year}"
+    return f"{week_start.strftime('%b')} {week_start.day}, {week_start.year} - {week_end.strftime('%b')} {week_end.day}, {week_end.year}"
+
+def calculate_weekly_habit_consistency(user_id: int, week_start: date, week_end: date):
+    habits = Habit.get_all(user_id, today_date=week_end) or []
+    if not habits:
+        return {
+            'active_habits': 0,
+            'best_streak': 0,
+            'habit_consistency': 0,
+            'habit_list': [],
+            'streak_highlight': 'No active habits yet'
+        }
+
+    completion_rows = execute_query(
+        """
+        SELECT habit_id, COUNT(DISTINCT completion_date) AS completed_days
+        FROM habit_completions
+        WHERE user_id = %s AND completion_date BETWEEN %s AND %s
+        GROUP BY habit_id
+        """,
+        (user_id, week_start, week_end)
+    ) or []
+    completed_by_habit = {row['habit_id']: row['completed_days'] for row in completion_rows}
+
+    total_expected = 0
+    total_completed = 0
+    best_streak = 0
+    best_habit = 'No habits completed yet'
+    habit_list = []
+
+    for habit in habits:
+        expected = 0
+        current_day = week_start
+        while current_day <= week_end:
+            if habit.get('frequency') == 'daily':
+                expected += 1
+            elif habit.get('frequency') == 'weekly':
+                if current_day.weekday() in (habit.get('days_of_week') or []):
+                    expected += 1
+            elif habit.get('frequency') == 'monthly':
+                created_at = habit.get('created_at')
+                anchor_day = created_at.day if created_at and hasattr(created_at, 'day') else current_day.day
+                if current_day.day == anchor_day:
+                    expected += 1
+            current_day += timedelta(days=1)
+
+        completed = int(completed_by_habit.get(habit['id'], 0) or 0)
+        total_expected += expected
+        total_completed += completed
+
+        longest_streak = Habit.calculate_longest_streak(habit['id'], user_id)
+        if longest_streak > best_streak:
+            best_streak = longest_streak
+            best_habit = habit['name']
+
+        consistency = round((completed / expected) * 100, 1) if expected > 0 else 0
+        habit_list.append({
+            'name': habit['name'],
+            'consistency': consistency,
+            'streak': longest_streak
+        })
+
+    habit_consistency = round((total_completed / total_expected) * 100, 1) if total_expected > 0 else 0
+    return {
+        'active_habits': len(habits),
+        'best_streak': best_streak,
+        'habit_consistency': habit_consistency,
+        'habit_list': habit_list,
+        'streak_highlight': best_habit
+    }
+
+def build_weekly_report(user_id: int, user_name: str, week_start: date, week_end: date):
+    completed_tasks_row = execute_query(
+        """
+        SELECT COUNT(*) AS completed_tasks
+        FROM tasks
+        WHERE user_id = %s AND is_completed = true AND completed_at IS NOT NULL
+          AND DATE(completed_at) BETWEEN %s AND %s
+        """,
+        (user_id, week_start, week_end),
+        fetch_one=True
+    ) or {}
+    remaining_tasks_row = execute_query(
+        "SELECT COUNT(*) AS remaining_tasks FROM tasks WHERE user_id = %s AND is_completed = false",
+        (user_id,),
+        fetch_one=True
+    ) or {}
+
+    completed_tasks = int(completed_tasks_row.get('completed_tasks', 0) or 0)
+    remaining_tasks = int(remaining_tasks_row.get('remaining_tasks', 0) or 0)
+    total_tasks = completed_tasks + remaining_tasks
+    completion_percentage = round((completed_tasks / total_tasks) * 100, 1) if total_tasks > 0 else 0
+
+    goals_metrics = Goal.calculate_all_metrics(user_id, today_date=week_end)
+    habits_metrics = calculate_weekly_habit_consistency(user_id, week_start, week_end)
+
+    goals_in_progress = goals_metrics['total_goals'] - goals_metrics['completed_goals']
+    incomplete_goals = [goal for goal in goals_metrics['goals_data'] if not goal.get('is_completed')]
+    top_goal_data = max(incomplete_goals, key=lambda goal: goal.get('goal_progress', 0), default=None)
+    top_goal = top_goal_data['title'] if top_goal_data else 'No active goals'
+
+    return {
+        'user_name': user_name or 'User',
+        'week_range': format_week_range(week_start, week_end),
+        'overview': {
+            'task_efficiency': completion_percentage,
+            'habit_consistency': habits_metrics['habit_consistency'],
+            'goal_progress': goals_metrics['average_goal_progress']
+        },
+        'tasks': {
+            'total_tasks': total_tasks,
+            'completed_tasks': completed_tasks,
+            'remaining_tasks': remaining_tasks,
+            'completion_percentage': completion_percentage
+        },
+        'habits': habits_metrics,
+        'goals': {
+            'goals_in_progress': goals_in_progress,
+            'completed_goals': goals_metrics['completed_goals'],
+            'top_goal': top_goal,
+            'goals_data': goals_metrics['goals_data']
+        }
+    }
+
+def build_weekly_summary_email(report: dict) -> str:
+    overview = report['overview']
+    tasks = report['tasks']
+    habits = report['habits']
+    goals = report['goals']
+
+    return f"""
+    <html>
+      <body style="margin:0;padding:24px;background:#f6f7fb;font-family:Arial,sans-serif;color:#1e293b;">
+        <div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;padding:32px;box-shadow:0 8px 30px rgba(15,23,42,0.06);">
+          <div style="font-size:14px;color:#64748b;margin-bottom:20px;">Hi {report['user_name']},</div>
+          <div style="font-size:18px;font-weight:700;color:#1e293b;margin-bottom:16px;">Here’s your HabitFlow weekly performance summary for {report['week_range']}.</div>
+          <div style="font-size:14px;color:#64748b;margin-bottom:24px;">You’ve been building momentum — let’s break it down:</div>
+
+          <div style="font-size:13px;font-weight:700;color:#7d79ff;margin:20px 0 8px;">OVERVIEW</div>
+          <div style="color:#334155;line-height:1.8;font-size:14px;">
+            <div>• Completion Rate: {overview['task_efficiency']}%</div>
+            <div>• Habit Consistency: {overview['habit_consistency']}%</div>
+            <div>• Goal Progress: {overview['goal_progress']}%</div>
+          </div>
+
+          <div style="font-size:13px;font-weight:700;color:#7d79ff;margin:20px 0 8px;">TASKS</div>
+          <div style="color:#334155;line-height:1.8;font-size:14px;">
+            <div>• Completed: {tasks['completed_tasks']}</div>
+            <div>• Pending: {tasks['remaining_tasks']}</div>
+          </div>
+
+          <div style="font-size:13px;font-weight:700;color:#7d79ff;margin:20px 0 8px;">HABITS</div>
+          <div style="color:#334155;line-height:1.8;font-size:14px;">
+            <div>• Active Habits: {habits['active_habits']}</div>
+            <div>• Best Streak: {habits['best_streak']} days</div>
+          </div>
+
+          <div style="font-size:13px;font-weight:700;color:#7d79ff;margin:20px 0 8px;">GOALS</div>
+          <div style="color:#334155;line-height:1.8;font-size:14px;">
+            <div>• Goals in Progress: {goals['goals_in_progress']}</div>
+            <div>• Closest Goal: {goals['top_goal']}</div>
+          </div>
+
+          <div style="margin-top:24px;font-size:14px;color:#64748b;">Your detailed performance report is attached as a PDF.</div>
+          <div style="margin-top:20px;font-size:14px;color:#1e293b;">Keep showing up — consistency compounds.</div>
+          <div style="margin-top:8px;font-size:14px;color:#64748b;">– HabitFlow</div>
+        </div>
+      </body>
+    </html>
+    """
+
 def run_weekly_summaries():
     print("Running weekly summaries...")
-    users = execute_query("SELECT * FROM users JOIN user_preferences ON users.id = user_preferences.user_id WHERE user_preferences.weekly_summary_emails = true")
+    users = execute_query(
+        "SELECT users.* FROM users JOIN user_preferences ON users.id = user_preferences.user_id WHERE user_preferences.weekly_summary_emails = true"
+    ) or []
     if not users:
         return
-        
+
+    week_start, week_end = get_previous_week_range()
+
     for user in users:
         try:
-            # Need to ensure we fetch metrics using sync DB calls or adapt get_analytics_metrics
-            # Because get_analytics_metrics is async. Since this is just a system run, we'll
-            # do simple fetching directly or call the sync equivalents if they exist.
-            from models.habit import Habit
-            from models.goal import Goal
-            from models.task import Task
-            
-            habits = Habit.calculate_all_metrics(user['id'])
-            goals = Goal.calculate_all_metrics(user['id'])
-            tasks = Task.calculate_metrics(user['id'])
-            
-            # Form simple mock metrics based on what pdf expects
-            avg_goal_progress = goals.get('average_goal_progress', 0)
-            avg_habit_consistency = 0
-            habits_data = habits.get('habits_data', [])
-            if habits_data:
-                avg_habit_consistency = sum(h.get('consistency', 0) for h in habits_data) / len(habits_data)
-            
-            productivity_score = round(
-                (0.5 * tasks['task_efficiency']) +
-                (0.3 * avg_habit_consistency) +
-                (0.2 * avg_goal_progress), 1
+            report = build_weekly_report(user['id'], user.get('full_name') or user.get('email'), week_start, week_end)
+            pdf_bytes = generate_weekly_pdf(report)
+            html_body = build_weekly_summary_email(report)
+            subject = f"HabitFlow weekly performance summary for {report['week_range']}"
+
+            send_email_with_pdf(
+                user['email'],
+                subject,
+                html_body,
+                pdf_bytes,
+                pdf_name='weekly-summary.pdf'
             )
-            
-            metrics = {
-                'productivity_score': productivity_score,
-                'completed_tasks': tasks.get('completed_tasks', 0),
-                'total_habits': habits.get('total_habits', 0)
-            }
-            
-            pdf_bytes = generate_weekly_pdf(user.get('full_name') or user.get('email'), metrics, habits_data, goals.get('goals_data', []))
-            
-            html_body = f"""
-            <html><body>
-            <h2>Your Weekly HabitFlow Digest</h2>
-            <p>Hi {user.get('full_name') or 'User'},</p>
-            <p>Your weekly summary is ready. Please find the attached PDF report.</p>
-            <p>Keep up the great work!</p>
-            </body></html>
-            """
-            
-            send_email_with_pdf(user['email'], "Your HabitFlow Weekly Summary", html_body, pdf_bytes)
         except Exception as e:
             print(f"Failed to send weekly summary to {user['email']}: {e}")
 
 @app.on_event("startup")
 def start_scheduler():
-    scheduler.add_job(run_weekly_summaries, 'cron', day_of_week='sun', hour=8)
+    scheduler.add_job(run_weekly_summaries, 'cron', day_of_week='mon', hour=8, minute=0, id='weekly_summaries', replace_existing=True)
     scheduler.start()
     
 @app.on_event("shutdown")

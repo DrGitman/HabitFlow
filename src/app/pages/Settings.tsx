@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type MouseEvent } from 'react';
 import { 
   Settings as SettingsIcon, 
   Bell, 
@@ -25,7 +25,52 @@ interface Preferences {
   anonymous_analytics: boolean;
 }
 
-const Toggle = ({ active, onClick, loading }: { active: boolean; onClick: () => void; loading?: boolean }) => (
+const runThemeTransition = (toggleButton: HTMLButtonElement | null, applyTheme: () => void) => {
+  const supportsTransition = 'startViewTransition' in document;
+
+  if (!supportsTransition) {
+    applyTheme();
+    return;
+  }
+
+  const rect = toggleButton?.getBoundingClientRect();
+  const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+  const y = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
+  const endRadius = Math.hypot(
+    Math.max(x, window.innerWidth - x),
+    Math.max(y, window.innerHeight - y)
+  );
+
+  const style = document.createElement('style');
+  style.textContent = `
+    ::view-transition-old(root) {
+      animation: none;
+    }
+
+    ::view-transition-new(root) {
+      animation: habitflow-theme-reveal 420ms ease-out;
+      transform-origin: ${x}px ${y}px;
+    }
+
+    @keyframes habitflow-theme-reveal {
+      from {
+        clip-path: circle(0px at ${x}px ${y}px);
+      }
+      to {
+        clip-path: circle(${endRadius}px at ${x}px ${y}px);
+      }
+    }
+  `;
+  document.head.appendChild(style);
+
+  (document as Document & { startViewTransition: (callback: () => void) => { finished: Promise<void> } }).startViewTransition(() => {
+    applyTheme();
+  }).finished.finally(() => {
+    style.remove();
+  });
+};
+
+const Toggle = ({ active, onClick, loading }: { active: boolean; onClick: (event: MouseEvent<HTMLButtonElement>) => void; loading?: boolean }) => (
   <button 
     onClick={onClick}
     disabled={loading}
@@ -61,7 +106,7 @@ export default function Settings() {
     }
   };
 
-  const togglePreference = async (key: keyof Preferences) => {
+  const togglePreference = async (key: keyof Preferences, event?: MouseEvent<HTMLButtonElement>) => {
     if (!prefs) return;
     
     const newValue = !prefs[key];
@@ -69,12 +114,15 @@ export default function Settings() {
     
     try {
       const updated = await api.updateUserPreferences({ [key]: newValue });
-      setPrefs(updated as Preferences);
-      
-      // Special logic for theme
+
       if (key === 'dark_mode') {
-        if (!newValue) document.body.classList.add('light-theme');
-        else document.body.classList.remove('light-theme');
+        runThemeTransition(event?.currentTarget ?? null, () => {
+          setPrefs(updated as Preferences);
+          if (!newValue) document.body.classList.add('light-theme');
+          else document.body.classList.remove('light-theme');
+        });
+      } else {
+        setPrefs(updated as Preferences);
       }
 
       toast.success('Settings updated');
@@ -108,7 +156,7 @@ export default function Settings() {
               key={id}
               onClick={() => setActiveTab(id)}
               className={`w-full flex items-center gap-[12px] px-[16px] py-[12px] rounded-[12px] transition-all text-[14px] ${
-                activeTab === id ? 'bg-[#222a3d] text-[#c2c1ff] font-semibold' : 'text-[#8b949e] hover:bg-[#222a3d]/50 font-normal hover:text-[#e6edf3]'
+                activeTab === id ? 'bg-[#222a3d] text-[#c2c1ff] font-semibold' : 'bg-transparent text-[#8b949e] hover:bg-transparent font-normal hover:text-[#e6edf3]'
               }`}
             >
               <Icon className="w-[15px] h-[15px]" />
@@ -139,11 +187,11 @@ export default function Settings() {
                         <span className="text-[#8b949e] text-[12px] font-medium">Switch between light and dark visual themes</span>
                       </div>
                     </div>
-                    <Toggle 
-                      active={prefs.dark_mode} 
-                      onClick={() => togglePreference('dark_mode')} 
-                      loading={updatingField === 'dark_mode'} 
-                    />
+                      <Toggle 
+                        active={prefs.dark_mode} 
+                        onClick={(e) => togglePreference('dark_mode', e)} 
+                        loading={updatingField === 'dark_mode'} 
+                      />
                   </div>
                 </div>
 

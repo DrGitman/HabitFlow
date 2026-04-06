@@ -1,16 +1,17 @@
 import os
 import smtplib
 from email.message import EmailMessage
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / '.env')
 
 SMTP_HOST = os.getenv("SMTP_HOST", "sandbox.smtp.mailtrap.io")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 2525))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 
-def send_email_with_pdf(to_email: str, subject: str, html_body: str, pdf_bytes: bytes, pdf_name: str = "Weekly_Summary.pdf"):
+def send_email_with_pdf(to_email: str, subject: str, html_body: str, pdf_bytes: bytes, pdf_name: str = "weekly-summary.pdf"):
     """Sends an email with an optional PDF attachment."""
     if not SMTP_USER or not SMTP_PASS:
         print(f"Skipping email to {to_email} (No SMTP credentials)")

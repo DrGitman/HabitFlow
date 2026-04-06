@@ -72,13 +72,13 @@ export default function Navigation() {
             <Link
               key={item.path}
               to={item.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-[12px] transition-all group ${
+              className={`sidebar-nav-link flex items-center gap-3 px-4 py-3 rounded-[12px] transition-all group ${
                 isActive
-                  ? 'bg-[#161b22] text-[#e6edf3] border border-[#ffffff0a] shadow-lg shadow-black/20'
-                  : 'text-[#8b949e] hover:bg-[#11141d] hover:text-[#e6edf3]'
+                  ? 'sidebar-nav-link-active bg-[#161b22] text-[#7c79fe] border border-[#ffffff0a] shadow-lg shadow-black/20'
+                  : 'sidebar-nav-link-inactive text-[#8b949e] hover:bg-[#11141d] hover:text-[#e6edf3]'
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-[#7c79ff]' : 'group-hover:text-[#7c79ff]'}`} />
+              <Icon className={`sidebar-nav-link-icon w-4 h-4 ${isActive ? 'text-[#7c79ff]' : 'group-hover:text-[#7c79ff]'}`} />
               <span className="font-['Inter'] font-bold text-[13px] tracking-tight">{item.name}</span>
               {isActive && (
                 <div className="ml-auto w-1 h-3 bg-[#7c79ff] rounded-full shadow-[0_0_8px_rgba(124,121,255,0.5)]" />

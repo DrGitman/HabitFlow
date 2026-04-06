@@ -102,11 +102,11 @@ class Goal:
         """
         habit_result = execute_query(habit_query, (today_date, goal_id), fetch_one=True)
         
-        total_tasks = task_result['total_tasks'] if task_result else 0
-        completed_tasks = task_result['completed_tasks'] if task_result else 0
+        total_tasks = (task_result['total_tasks'] if task_result else 0) or 0
+        completed_tasks = (task_result['completed_tasks'] if task_result else 0) or 0
         
-        total_habits = habit_result['total_habits'] if habit_result else 0
-        completed_habits = habit_result['completed_habits'] if habit_result else 0
+        total_habits = (habit_result['total_habits'] if habit_result else 0) or 0
+        completed_habits = (habit_result['completed_habits'] if habit_result else 0) or 0
         
         total = total_tasks + total_habits
         completed = completed_tasks + completed_habits

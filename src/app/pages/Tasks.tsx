@@ -36,32 +36,17 @@ const PRIORITY_OPTIONS = ['low', 'medium', 'high'] as const;
 type Filter = 'all' | 'work' | 'personal' | 'school';
 
 // Pomodoro timer display - now task-linked
-function FocusMode({ onSessionStart }: { onSessionStart: (taskId: number) => void }) {
+function FocusMode({ onSessionStart, tasks }: { onSessionStart: (taskId: number) => void; tasks: Task[] }) {
   const [seconds, setSeconds] = useState(25 * 60);
   const [running, setRunning] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [incompleteTasks, setIncompleteTasks] = useState<Task[]>([]);
-
-  useEffect(() => {
-    fetchTasks();
-  }, []);
+  const incompleteTasks = tasks.filter(t => !t.is_completed);
 
   useEffect(() => {
     if (!running) return;
     const id = setInterval(() => setSeconds(s => Math.max(0, s - 1)), 1000);
     return () => clearInterval(id);
   }, [running]);
-
-  const fetchTasks = async () => {
-    try {
-      const data = await api.getTasks();
-      setTasks(data as Task[]);
-      setIncompleteTasks((data as Task[]).filter(t => !t.is_completed));
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   const handleStartSession = async () => {
     if (!selectedTaskId) {
@@ -81,7 +66,6 @@ function FocusMode({ onSessionStart }: { onSessionStart: (taskId: number) => voi
           onClick: async () => {
             try {
               await api.completeTask(selectedTaskId!, true);
-              fetchTasks();
             } catch (e) {
               console.error(e);
             }
@@ -139,6 +123,9 @@ function FocusMode({ onSessionStart }: { onSessionStart: (taskId: number) => voi
             <option key={t.id} value={t.id}>{t.title}</option>
           ))}
         </select>
+        {incompleteTasks.length === 0 && (
+          <p className="mt-2 text-[11px] text-[#8b949e]">No incomplete tasks available yet.</p>
+        )}
       </div>
       <div className="px-5 pb-5 pt-4">
         <button
@@ -860,7 +847,7 @@ export default function Tasks({ forceNew, onFormOpened, highlightId, onHighlight
         {/* RIGHT — sidebar */}
         <div className="flex flex-col gap-4">
           {/* Focus Mode / Pomodoro */}
-          <FocusMode onSessionStart={handleSessionStart} />
+          <FocusMode onSessionStart={handleSessionStart} tasks={tasks} />
 
           {/* Upcoming */}
           <UpcomingTasks tasks={tasks} />

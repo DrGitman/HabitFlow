@@ -6,9 +6,10 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
 from contextlib import contextmanager
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[1] / '.env')
 
 # Placeholder - replace with your actual PostgreSQL connection string
 # Format: postgresql://username:password@host:port/database
