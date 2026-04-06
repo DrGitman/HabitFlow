@@ -49,12 +49,14 @@ interface Achievement {
 
 const Modal = ({ isOpen, onClose, title, children }: any) => {
   if (!isOpen) return null;
+  const isLightTheme = typeof document !== 'undefined' && document.body.classList.contains('light-theme');
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-[#11141d] border border-[#ffffff0a] rounded-[24px] w-full max-w-md overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between p-6 border-b border-[#ffffff0a]">
-          <h3 className="text-white font-bold text-[18px]">{title}</h3>
-          <button onClick={onClose} className="text-[#8b949e] hover:text-white transition-colors">
+      <div className={`rounded-[24px] w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 ${isLightTheme ? 'bg-white border border-[#e2e8f0] shadow-[0_20px_60px_rgba(15,23,42,0.15)]' : 'bg-[#11141d] border border-[#ffffff0a] shadow-[0_20px_60px_rgba(0,0,0,0.8)]'}`}>
+        <div className={`flex items-center justify-between p-6 ${isLightTheme ? 'border-b border-[#e2e8f0]' : 'border-b border-[#ffffff0a]'}`}>
+          <h3 className={`font-bold text-[18px] ${isLightTheme ? 'text-[#1e293b]' : 'text-white'}`}>{title}</h3>
+          <button onClick={onClose} className={`${isLightTheme ? 'text-[#64748b] hover:text-[#1e293b]' : 'text-[#8b949e] hover:text-white'} transition-colors`}>
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -67,6 +69,7 @@ const Modal = ({ isOpen, onClose, title, children }: any) => {
 export default function Profile() {
   const location = useLocation();
   const { user, setUser } = useAuth();
+  const isLightTheme = typeof document !== 'undefined' && document.body.classList.contains('light-theme');
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
@@ -253,11 +256,16 @@ export default function Profile() {
     : 'Unknown';
 
   const getIcon = (iconName: string) => {
-    switch (iconName) {
-      case 'Flame': return Flame;
-      case 'Zap': return Zap;
-      case 'CheckCircle2': return CheckCircle2;
-      case 'Award': return Award;
+    switch ((iconName || '').toLowerCase()) {
+      case 'flame': return Flame;
+      case 'zap': return Zap;
+      case 'checkcircle2':
+      case 'check-circle':
+      case 'checkcircle': return CheckCircle2;
+      case 'award': return Award;
+      case 'target': return Target;
+      case 'shield': return Shield;
+      case 'activity': return Cpu;
       default: return Trophy;
     }
   };
@@ -412,10 +420,12 @@ export default function Profile() {
           ) : (
             achievements.slice(0, 3).map((achievement, i) => {
               const Icon = getIcon(achievement.icon);
-              const isEpic = achievement.type.toLowerCase().includes('master') || achievement.type.toLowerCase().includes('legend');
-              const isRare = achievement.type.toLowerCase().includes('architect') || achievement.type.toLowerCase().includes('advanced');
+              const rankType = (achievement.type || 'COMMON').toUpperCase();
+              const isEpic = rankType === 'EPIC';
+              const isRare = rankType === 'RARE';
               const rarityLabel = isEpic ? 'Epic' : isRare ? 'Rare' : 'Common';
-              const rarityColor = isEpic ? '#bc8cff' : isRare ? '#7c79ff' : '#8b949e';
+              const rarityColor = isEpic ? '#bc8cff' : isRare ? '#7c79ff' : (isLightTheme ? '#475569' : '#cbd5e1');
+              const badgeAccent = achievement.color || rarityColor;
               
               return (
                 <div 
@@ -426,8 +436,14 @@ export default function Profile() {
                   <div className="absolute -top-24 -right-24 w-48 h-48 bg-white/5 rounded-full blur-3xl group-hover:bg-white/10 transition-all duration-700" />
                   
                   {/* Rarity Badge */}
-                  <div className="absolute top-6 right-6 flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 border border-[#ffffff0a]">
-                    <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: rarityColor }} />
+                  <div 
+                    className="absolute top-6 right-6 flex items-center gap-1.5 px-3 py-1 rounded-full border"
+                    style={{ 
+                      backgroundColor: isLightTheme ? `${badgeAccent}18` : 'rgba(0,0,0,0.4)',
+                      borderColor: isLightTheme ? `${badgeAccent}35` : 'rgba(255,255,255,0.08)'
+                    }}
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: badgeAccent }} />
                     <span className="text-[10px] font-black uppercase tracking-[0.1em]" style={{ color: rarityColor }}>{rarityLabel}</span>
                   </div>
 
@@ -499,47 +515,56 @@ export default function Profile() {
       <Modal 
         isOpen={isPasswordModalOpen} 
         onClose={() => setIsPasswordModalOpen(false)} 
-        title="Change Access Protocol"
+        title="Change Password"
       >
         <form onSubmit={handlePasswordChange} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-[#8b949e] text-[9px] font-black uppercase tracking-[0.2em]">Current Password</label>
+            <label className={`text-[9px] font-black uppercase tracking-[0.2em] ${isLightTheme ? 'text-[#64748b]' : 'text-[#8b949e]'}`}>Current Password</label>
             <input
               type="password"
               required
               value={passwordForm.current}
               onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
-              className="w-full bg-[#080b12] border border-[#ffffff0a] rounded-[12px] py-3 px-4 text-white text-[13px] focus:outline-none focus:border-[#7c79ff]"
+              className={`w-full rounded-[12px] py-3 px-4 text-[13px] focus:outline-none focus:border-[#7c79ff] ${isLightTheme ? 'bg-[#f8fafc] border border-[#e2e8f0] text-[#1e293b]' : 'bg-[#080b12] border border-[#ffffff0a] text-white'}`}
             />
           </div>
           <div className="space-y-2">
-            <label className="text-[#8b949e] text-[9px] font-black uppercase tracking-[0.2em]">New Password</label>
+            <label className={`text-[9px] font-black uppercase tracking-[0.2em] ${isLightTheme ? 'text-[#64748b]' : 'text-[#8b949e]'}`}>New Password</label>
             <input
               type="password"
               required
               value={passwordForm.new}
               onChange={(e) => setPasswordForm({ ...passwordForm, new: e.target.value })}
-              className="w-full bg-[#080b12] border border-[#ffffff0a] rounded-[12px] py-3 px-4 text-white text-[13px] focus:outline-none focus:border-[#7c79ff]"
+              className={`w-full rounded-[12px] py-3 px-4 text-[13px] focus:outline-none focus:border-[#7c79ff] ${isLightTheme ? 'bg-[#f8fafc] border border-[#e2e8f0] text-[#1e293b]' : 'bg-[#080b12] border border-[#ffffff0a] text-white'}`}
             />
           </div>
           <div className="space-y-2">
-            <label className="text-[#8b949e] text-[9px] font-black uppercase tracking-[0.2em]">Confirm New Password</label>
+            <label className={`text-[9px] font-black uppercase tracking-[0.2em] ${isLightTheme ? 'text-[#64748b]' : 'text-[#8b949e]'}`}>Confirm New Password</label>
             <input
               type="password"
               required
               value={passwordForm.confirm}
               onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
-              className="w-full bg-[#080b12] border border-[#ffffff0a] rounded-[12px] py-3 px-4 text-white text-[13px] focus:outline-none focus:border-[#7c79ff]"
+              className={`w-full rounded-[12px] py-3 px-4 text-[13px] focus:outline-none focus:border-[#7c79ff] ${isLightTheme ? 'bg-[#f8fafc] border border-[#e2e8f0] text-[#1e293b]' : 'bg-[#080b12] border border-[#ffffff0a] text-white'}`}
             />
           </div>
           {passwordError && <p className="text-[#f85149] text-[11px] font-bold">{passwordError}</p>}
-          <button
-            type="submit"
-            disabled={passwordSaving}
-            className="w-full bg-[#7c79ff] hover:bg-[#6d69f0] text-white font-bold py-3.5 rounded-[12px] transition-all flex items-center justify-center gap-2"
-          >
-            {passwordSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Password'}
-          </button>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setIsPasswordModalOpen(false)}
+              className={`flex-1 border font-bold py-3.5 rounded-[12px] transition-all ${isLightTheme ? 'bg-white border-[#e2e8f0] text-[#475569] hover:text-[#1e293b] hover:bg-[#f8fafc]' : 'bg-transparent border-[#ffffff0a] text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#ffffff05]'}`}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={passwordSaving}
+              className="flex-1 bg-[#7c79ff] hover:bg-[#6d69f0] text-white font-bold py-3.5 rounded-[12px] transition-all flex items-center justify-center gap-2"
+            >
+              {passwordSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Password'}
+            </button>
+          </div>
         </form>
       </Modal>
 
