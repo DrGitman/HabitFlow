@@ -308,19 +308,26 @@ export default function Settings() {
                       <span className="text-[#e6edf3] text-[15px] font-medium">Delete Account</span>
                       <button
                         onClick={async () => {
-                          if (window.confirm("Are you absolutely sure? This will delete all your data forever.")) {
-                            try {
-                              const token = localStorage.getItem('token');
-                              await fetch('http://localhost:5000/api/profile', {
-                                method: 'DELETE',
-                                headers: { 'Authorization': `Bearer ${token}` }
-                              });
-                              localStorage.removeItem('token');
-                              window.location.href = '/login';
-                            } catch(e) {
-                              toast.error("Failed to delete account");
-                            }
-                          }
+                          toast.error('Delete your account permanently?', {
+                            action: {
+                              label: 'Delete',
+                              onClick: async () => {
+                                try {
+                                  const token = localStorage.getItem('token');
+                                  await fetch('http://localhost:5000/api/profile', {
+                                    method: 'DELETE',
+                                    headers: { 'Authorization': `Bearer ${token}` }
+                                  });
+                                  localStorage.removeItem('token');
+                                  window.location.href = '/login';
+                                } catch(e) {
+                                  toast.error('Failed to delete account');
+                                }
+                              }
+                            },
+                            cancel: { label: 'Cancel', onClick: () => {} },
+                            duration: 10000,
+                          });
                         }}
                         className="bg-[#da3633] hover:bg-[#b32b28] text-white px-4 py-2 rounded-[8px] text-[14px] font-bold transition-all"
                       >

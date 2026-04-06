@@ -124,6 +124,7 @@
 
   body {
     @apply bg-background text-foreground;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
   /**
@@ -285,12 +286,107 @@
   background-color: #ef4444 !important;
 }
 
+/* Daily Grind card */
+.light-theme .daily-grind-card {
+  background: linear-gradient(to bottom right, #f8fafc, #f1f5f9) !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light-theme .daily-grind-card-label {
+  color: #64748b !important;
+}
+
+.light-theme .daily-grind-card-quote {
+  color: #1e293b !important;
+}
+
+.light-theme .calendar-plan-button {
+  background-color: #e2e8f0 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+.light-theme .calendar-plan-button:hover {
+  background-color: #cbd5e1 !important;
+}
+
+.light-theme .calendar-streak-card {
+  background-color: #7d79ff !important;
+  border-color: #7d79ff !important;
+}
+
+.light-theme .calendar-streak-card,
+.light-theme .calendar-streak-card * {
+  color: #ffffff !important;
+}
+
+.light-theme .calendar-grid {
+  border-color: #cbd5e1 !important;
+}
+
+.light-theme .calendar-grid .calendar-grid-cell {
+  border-color: #cbd5e1 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background-color: #ffffff !important;
+}
+
+.light-theme .calendar-grid .calendar-grid-cell:hover {
+  background-color: #f8fafc !important;
+}
+
+.light-theme .calendar-grid .calendar-grid-cell.bg-\[\#0d1117\]\/30 {
+  background-color: #f8fafc !important;
+}
+
+.light-theme .calendar-grid .calendar-grid-cell.bg-\[\#161b22\],
+.light-theme .calendar-grid .calendar-grid-cell.ring-2 {
+  background-color: #eef2ff !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.light-theme a.notification-button {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #64748b !important;
+}
+
+.light-theme a.notification-button:hover {
+  background: transparent !important;
+  color: #475569 !important;
+}
+
+.light-theme .notification-dot {
+  border-color: #ffffff !important;
+}
+
+.notification-dot {
+  z-index: 20;
+  box-shadow: 0 0 0 1px rgba(8, 11, 18, 0.2);
+}
+
 /* Toasts */
 .light-theme [data-sonner-toast] [data-content] {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
   color: #1e293b !important;
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.light-theme [data-sonner-toast] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+.light-theme [data-sonner-toast] [data-title] {
+  color: #1e293b !important;
+}
+
+.light-theme [data-sonner-toast] [data-description] {
+  color: #64748b !important;
 }
 
 /* Logo Fixes */

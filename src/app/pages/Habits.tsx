@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '../services/api';
+import { toast } from 'sonner';
 import { Check, Plus, X, Flame, Droplets, Brain, BookOpen, Dumbbell, Code2, Link2, Circle } from 'lucide-react';
 
 interface Habit {
@@ -376,9 +377,16 @@ export default function Habits({ forceNew, onFormOpened, highlightId, onHighligh
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('Delete this habit?')) {
-      try { await api.deleteHabit(id); fetchHabits(); } catch (e) { console.error(e); }
-    }
+    toast.warning('Delete this habit?', {
+      action: {
+        label: 'Delete',
+        onClick: async () => {
+          try { await api.deleteHabit(id); fetchHabits(); } catch (e) { console.error(e); }
+        }
+      },
+      cancel: { label: 'Cancel', onClick: () => {} },
+      duration: 8000,
+    });
   };
 
   const handleEdit = (h: Habit) => {

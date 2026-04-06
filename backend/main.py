@@ -571,7 +571,17 @@ async def get_calendar_data(start_date: Optional[str] = None, end_date: Optional
         start_date = today.replace(day=1).date()
         end_date = (today.replace(day=1) + timedelta(days=32)).replace(day=1).date() - timedelta(days=1)
 
-    tasks = Task.get_by_date_range(user_id, start_date, end_date)
+    tasks_query = """
+        SELECT * FROM tasks
+        WHERE user_id = %s
+          AND due_date BETWEEN %s AND %s
+          AND id NOT IN (
+            SELECT item_id FROM scheduled_items
+            WHERE user_id = %s AND item_type = 'task' AND is_confirmed = true
+          )
+        ORDER BY due_date ASC
+    """
+    tasks = execute_query(tasks_query, (user_id, start_date, end_date, user_id)) or []
     query = """
         SELECT hc.completion_date, h.id, h.name, h.color, hc.count
         FROM habit_completions hc
@@ -588,15 +598,69 @@ async def get_calendar_data(start_date: Optional[str] = None, end_date: Optional
 
 @app.get("/api/tasks/upcoming")
 async def get_upcoming_tasks(user_id: int = Depends(get_current_user_id)):
-    """Get upcoming tasks (future due dates)"""
+    """Get upcoming planned tasks, falling back to due-date tasks"""
     today = datetime.now().date()
-    query = """
-        SELECT * FROM tasks 
+    planned_query = """
+        SELECT
+            t.id,
+            t.title,
+            t.category,
+            si.scheduled_date,
+            si.scheduled_time,
+            t.due_date,
+            t.is_completed
+        FROM scheduled_items si
+        JOIN tasks t ON t.id = si.item_id
+        WHERE si.user_id = %s
+          AND si.item_type = 'task'
+          AND si.is_confirmed = true
+          AND t.is_completed = false
+          AND (
+            si.scheduled_date > %s OR
+            (si.scheduled_date = %s AND (si.scheduled_time IS NULL OR si.scheduled_time >= CURRENT_TIME))
+          )
+        ORDER BY si.scheduled_date ASC, si.scheduled_time ASC NULLS FIRST
+        LIMIT 10
+    """
+    planned = execute_query(planned_query, (user_id, today, today)) or []
+
+    serialized_planned = []
+    planned_ids = set()
+    for item in planned:
+        planned_ids.add(item['id'])
+        serialized_planned.append({
+            'id': item['id'],
+            'title': item['title'],
+            'category': item.get('category'),
+            'due_date': item['due_date'].isoformat() if item.get('due_date') else None,
+            'scheduled_date': item['scheduled_date'].isoformat() if item.get('scheduled_date') else None,
+            'scheduled_time': str(item['scheduled_time']) if item.get('scheduled_time') else None,
+            'is_completed': item.get('is_completed', False)
+        })
+
+    fallback_query = """
+        SELECT id, title, category, due_date, is_completed
+        FROM tasks 
         WHERE user_id = %s AND due_date IS NOT NULL AND due_date >= %s AND is_completed = false
         ORDER BY due_date ASC
         LIMIT 10
     """
-    return execute_query(query, (user_id, today)) or []
+    fallback = execute_query(fallback_query, (user_id, today)) or []
+    fallback_items = []
+    for item in fallback:
+        if item['id'] in planned_ids:
+            continue
+        fallback_items.append({
+            'id': item['id'],
+            'title': item['title'],
+            'category': item.get('category'),
+            'due_date': item['due_date'].isoformat() if item.get('due_date') else None,
+            'scheduled_date': None,
+            'scheduled_time': None,
+            'is_completed': item.get('is_completed', False)
+        })
+
+    return (serialized_planned + fallback_items)[:10]
 
 @app.get("/api/analytics/calendar-stats")
 async def get_calendar_stats(user_id: int = Depends(get_current_user_id)):
@@ -862,6 +926,49 @@ def calculate_user_rank(completed_tasks: int) -> str:
     if completed_tasks >= 50: return "Intermediate"
     if completed_tasks >= 10: return "Beginner"
     return "New User"
+
+def build_scheduled_notification_datetime(scheduled_date: str, scheduled_time: Optional[str]):
+    """Build a datetime for reminder notifications from planned date/time."""
+    if not scheduled_time:
+        return None
+
+    normalized_time = scheduled_time[:8]
+    try:
+        return datetime.fromisoformat(f"{scheduled_date}T{normalized_time}")
+    except ValueError:
+        return None
+
+def create_planning_reminders(user_id: int, item: dict, item_title: str):
+    """Create reminders 5 minutes before and at planned start."""
+    reminder_at = build_scheduled_notification_datetime(
+        item['scheduled_date'],
+        item.get('scheduled_time')
+    )
+
+    if not reminder_at:
+        return
+
+    five_minutes_before = reminder_at - timedelta(minutes=5)
+
+    Notification.create(
+        user_id=user_id,
+        type='reminder',
+        title=f"Starting soon: {item_title}",
+        message=f"Your planned {item['item_type']} starts in 5 minutes at {item.get('scheduled_time')}.",
+        related_entity_type=item['item_type'],
+        related_entity_id=item['item_id'],
+        scheduled_for=five_minutes_before
+    )
+
+    Notification.create(
+        user_id=user_id,
+        type='reminder',
+        title=f"It's time for {item_title}",
+        message=f"Your planned {item['item_type']} starts now.",
+        related_entity_type=item['item_type'],
+        related_entity_id=item['item_id'],
+        scheduled_for=reminder_at
+    )
 
 @app.get("/api/profile")
 async def get_profile(user_id: int = Depends(get_current_user_id)):
@@ -1164,10 +1271,27 @@ async def confirm_scheduled_items(
                 confirmed_item = ScheduledItem.confirm(scheduled['id'], user_id)
                 confirmed.append(confirmed_item)
         else:
-            # Already exists, just confirm it
-            confirmed_item = ScheduledItem.confirm(existing['id'], user_id)
+            # Already exists, update it with the latest chosen time and confirm it
+            confirmed_item = ScheduledItem.update(
+                existing['id'],
+                user_id,
+                scheduled_time=item.get('scheduled_time'),
+                duration_minutes=item.get('duration_minutes', 30),
+                is_confirmed=True
+            )
             if confirmed_item:
                 confirmed.append(confirmed_item)
+
+        item_title = item.get('title')
+        if not item_title:
+            if item['item_type'] == 'task':
+                task = Task.get_by_id(item['item_id'], user_id)
+                item_title = task.get('title') if task else 'task'
+            elif item['item_type'] == 'habit':
+                habit = Habit.get_by_id(item['item_id'], user_id)
+                item_title = habit.get('name') if habit else 'habit'
+
+        create_planning_reminders(user_id, item, item_title)
     
     return {'confirmed': confirmed}
 
@@ -1182,6 +1306,9 @@ async def get_scheduled_items(
         start_date = (datetime.now().date() - timedelta(days=7)).isoformat()
     if not end_date:
         end_date = (datetime.now().date() + timedelta(days=30)).isoformat()
+
+    start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+    end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
     
     items = ScheduledItem.get_by_date_range(user_id, start_date, end_date)
     
@@ -1190,14 +1317,50 @@ async def get_scheduled_items(
     for item in items:
         if item['item_type'] == 'task':
             task = Task.get_by_id(item['item_id'], user_id)
-            item['title'] = task['title'] if task else 'Unknown Task'
-            item['description'] = task.get('description', '') if task else ''
-        elif item['item_type'] == 'habit':
+            if not task:
+                continue
+            item['title'] = task['title']
+            item['description'] = task.get('description', '')
+            item['category'] = task.get('category')
+            item['priority'] = task.get('priority')
+            enriched.append(item)
+            continue
+
+        if item['item_type'] == 'habit':
             habit = Habit.get_by_id(item['item_id'], user_id)
-            item['title'] = habit['name'] if habit else 'Unknown Habit'
-            item['description'] = habit.get('description', '') if habit else ''
-            item['color'] = habit.get('color', '#39d353') if habit else '#39d353'
-        enriched.append(item)
+            if not habit:
+                continue
+
+            habit_title = habit['name']
+            habit_description = habit.get('description', '')
+            habit_color = habit.get('color', '#39d353')
+            frequency = habit.get('frequency', 'daily')
+            days_of_week = habit.get('days_of_week') or [0, 1, 2, 3, 4, 5, 6]
+
+            scheduled_date = item['scheduled_date']
+            occurrence_start = max(start_date_obj, scheduled_date) if scheduled_date else start_date_obj
+            current_day = occurrence_start
+
+            while current_day <= end_date_obj:
+                weekday = current_day.weekday()
+                include_day = False
+                if frequency == 'daily':
+                    include_day = True
+                elif frequency == 'weekly':
+                    include_day = weekday in days_of_week
+                elif frequency == 'monthly':
+                    include_day = scheduled_date and current_day.day == scheduled_date.day
+
+                if include_day:
+                    enriched.append({
+                        **dict(item),
+                        'scheduled_date': current_day,
+                        'title': habit_title,
+                        'description': habit_description,
+                        'color': habit_color
+                    })
+
+                current_day += timedelta(days=1)
     
     return enriched
 

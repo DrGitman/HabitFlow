@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '../services/api';
+import { toast } from 'sonner';
 import {
   Check, Plus, Clock, CheckCircle2, Trash2, Edit2, Tag, Calendar as CalendarIcon, Link2, X,
 } from 'lucide-react';
@@ -11,6 +12,8 @@ interface Task {
   category?: string;
   priority: 'low' | 'medium' | 'high';
   due_date?: string;
+   scheduled_date?: string;
+   scheduled_time?: string;
   goal_id?: number | null;
   is_completed: boolean;
   created_at: string;
@@ -62,7 +65,7 @@ function FocusMode({ onSessionStart }: { onSessionStart: (taskId: number) => voi
 
   const handleStartSession = async () => {
     if (!selectedTaskId) {
-      alert('Please select a task first');
+      toast.warning('Please select a task first');
       return;
     }
     setRunning(true);
@@ -72,15 +75,24 @@ function FocusMode({ onSessionStart }: { onSessionStart: (taskId: number) => voi
   const handleTimerEnd = async () => {
     if (running && seconds === 0) {
       setRunning(false);
-      const response = confirm('Did you complete this task?');
-      if (response) {
-        try {
-          await api.completeTask(selectedTaskId!, true);
-          fetchTasks();
-        } catch (e) {
-          console.error(e);
-        }
-      }
+      toast.info('Did you complete this task?', {
+        action: {
+          label: 'Yes, complete',
+          onClick: async () => {
+            try {
+              await api.completeTask(selectedTaskId!, true);
+              fetchTasks();
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        },
+        cancel: {
+          label: 'No',
+          onClick: () => {}
+        },
+        duration: 10000,
+      });
       setSeconds(25 * 60);
       setSelectedTaskId(null);
     }
@@ -183,12 +195,24 @@ function MiniHeatmap({ completions }: { completions: HabitCompletion[] }) {
 // Upcoming panel - now fetched from DB
 function UpcomingTasks({ tasks }: { tasks: Task[] }) {
   const upcomingTasks = tasks
-    .filter(t => t.due_date && !t.is_completed)
+    .filter(t => (t.scheduled_date || t.due_date) && !t.is_completed)
     .sort((a, b) => {
-      if (!a.due_date || !b.due_date) return 0;
-      return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      const aDate = a.scheduled_date || a.due_date;
+      const bDate = b.scheduled_date || b.due_date;
+      if (!aDate || !bDate) return 0;
+      return new Date(aDate).getTime() - new Date(bDate).getTime();
     })
     .slice(0, 5);
+
+  const formatScheduledTime = (timeStr?: string) => {
+    if (!timeStr) return null;
+    const normalized = String(timeStr).slice(0, 5);
+    const [hours, minutes] = normalized.split(':').map(Number);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+    const suffix = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = hours % 12 || 12;
+    return `${hour12.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${suffix}`;
+  };
 
   const formatDueDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -215,8 +239,9 @@ function UpcomingTasks({ tasks }: { tasks: Task[] }) {
             <div key={task.id} className="flex gap-3">
               <div className="w-[3px] rounded-full bg-[#7c79ff] shrink-0 mt-0.5" />
               <div>
-                <p className="text-[11px] text-[#8b949e]">{task.due_date ? formatDueDate(task.due_date) : 'No date'}</p>
+                <p className="text-[11px] text-[#8b949e]">{(task.scheduled_date || task.due_date) ? formatDueDate(task.scheduled_date || task.due_date || '') : 'No date'}</p>
                 <p className="text-[13px] font-semibold text-[#c7c4d7]">{task.title}</p>
+                {task.scheduled_time && <p className="text-[11px] text-[#8b949e] mt-0.5">{formatScheduledTime(task.scheduled_time)}</p>}
               </div>
             </div>
           ))
@@ -503,7 +528,16 @@ export default function Tasks({ forceNew, onFormOpened, highlightId, onHighlight
     } catch (e) { console.error(e); }
   };
   const handleDelete = async (id: number) => {
-    if (confirm('Delete this task?')) { try { await api.deleteTask(id); fetchTasks(); } catch (e) { console.error(e); } }
+    toast.warning('Delete this task?', {
+      action: {
+        label: 'Delete',
+        onClick: async () => {
+          try { await api.deleteTask(id); fetchTasks(); } catch (e) { console.error(e); }
+        }
+      },
+      cancel: { label: 'Cancel', onClick: () => {} },
+      duration: 8000,
+    });
   };
   const handleEdit = (t: Task) => {
     setEditingTask(t);
@@ -519,7 +553,7 @@ export default function Tasks({ forceNew, onFormOpened, highlightId, onHighlight
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       if (selected < today) {
-        alert("Deadline cannot be in the past.");
+        toast.error('Deadline cannot be in the past.');
         return;
       }
     }
@@ -558,11 +592,23 @@ export default function Tasks({ forceNew, onFormOpened, highlightId, onHighlight
   const pending   = visible.filter(t => !t.is_completed);
   const completed = visible.filter(t => t.is_completed);
 
-  // Format time from due_date or created_at
-  const fmtTime = (iso?: string) => {
+  const fmtScheduledTime = (timeStr?: string) => {
+    if (!timeStr) return null;
+    const normalized = String(timeStr).slice(0, 5);
+    const [hours, minutes] = normalized.split(':').map(Number);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+    const suffix = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = hours % 12 || 12;
+    return `${hour12.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${suffix}`;
+  };
+
+  const fmtCompletedTime = (iso?: string) => {
     if (!iso) return null;
-    try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
-    catch { return null; }
+    try {
+      return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return null;
+    }
   };
 
   const handleSessionStart = (taskId: number) => {
@@ -603,7 +649,7 @@ export default function Tasks({ forceNew, onFormOpened, highlightId, onHighlight
           {/* Pending tasks */}
           {pending.map(task => {
             const pm  = PRIORITY_META[task.priority];
-            const t   = fmtTime(task.due_date || task.created_at);
+            const t   = fmtScheduledTime(task.scheduled_time);
             return (
               <div
                 key={task.id}
@@ -682,7 +728,7 @@ export default function Tasks({ forceNew, onFormOpened, highlightId, onHighlight
                 <p className="text-[14px] font-medium text-[#8b949e] line-through truncate">{task.title}</p>
                 <p className="text-[11px] text-[#8b949e]/60 mt-0.5 flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3 text-[#22c55e]" />
-                  Completed {fmtTime(task.created_at)}
+                  Completed {fmtCompletedTime(task.created_at)}
                 </p>
               </div>
               <button onClick={() => handleDelete(task.id)} className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#f85149] opacity-0 group-hover:opacity-100 transition-all">

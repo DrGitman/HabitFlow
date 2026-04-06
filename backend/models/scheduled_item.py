@@ -64,6 +64,29 @@ class ScheduledItem:
         return execute_query(query, (scheduled_id, user_id), fetch_one=True)
 
     @staticmethod
+    def update(scheduled_id, user_id, scheduled_time=None, duration_minutes=None, is_confirmed=None):
+        """Update an existing scheduled item"""
+        fields = []
+        params = []
+
+        if scheduled_time is not None:
+            fields.append("scheduled_time = %s")
+            params.append(scheduled_time)
+        if duration_minutes is not None:
+            fields.append("duration_minutes = %s")
+            params.append(duration_minutes)
+        if is_confirmed is not None:
+            fields.append("is_confirmed = %s")
+            params.append(is_confirmed)
+
+        if not fields:
+            return None
+
+        params.extend([scheduled_id, user_id])
+        query = f"UPDATE scheduled_items SET {', '.join(fields)} WHERE id = %s AND user_id = %s RETURNING *"
+        return execute_query(query, tuple(params), fetch_one=True)
+
+    @staticmethod
     def confirm_all(user_id, scheduled_ids):
         """Confirm multiple scheduled items"""
         query = """

@@ -16,14 +16,34 @@ class Task:
     @staticmethod
     def get_all(user_id, is_completed=None):
         """Get all tasks for user"""
-        query = "SELECT * FROM tasks WHERE user_id = %s"
+        query = """
+            SELECT
+                t.*,
+                si.scheduled_date,
+                si.scheduled_time
+            FROM tasks t
+            LEFT JOIN LATERAL (
+                SELECT scheduled_date, scheduled_time
+                FROM scheduled_items
+                WHERE user_id = t.user_id
+                  AND item_type = 'task'
+                  AND item_id = t.id
+                  AND is_confirmed = true
+                ORDER BY
+                  CASE WHEN scheduled_date >= CURRENT_DATE THEN 0 ELSE 1 END,
+                  scheduled_date ASC,
+                  scheduled_time ASC NULLS FIRST
+                LIMIT 1
+            ) si ON true
+            WHERE t.user_id = %s
+        """
         params = [user_id]
 
         if is_completed is not None:
-            query += " AND is_completed = %s"
+            query += " AND t.is_completed = %s"
             params.append(is_completed)
 
-        query += " ORDER BY due_date ASC NULLS LAST, created_at DESC"
+        query += " ORDER BY t.due_date ASC NULLS LAST, t.created_at DESC"
         return execute_query(query, tuple(params))
 
     @staticmethod

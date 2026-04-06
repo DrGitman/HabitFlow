@@ -13,17 +13,17 @@ export default function TopBar() {
   const [showResults, setShowResults] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
 
-  const hasUnread = notifications.some(n => !n.is_read);
+  const hasUnread = notifications.length > 0;
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60000); // Poll every minute
+    const interval = setInterval(fetchNotifications, 5000);
     return () => clearInterval(interval);
   }, []);
 
   const fetchNotifications = async () => {
     try {
-      const data = await api.getNotifications();
+      const data = await api.getUnreadNotifications();
       setNotifications(data as any[]);
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
@@ -149,10 +149,10 @@ export default function TopBar() {
 
       {/* Right Side Actions */}
       <div className="flex items-center gap-6">
-        <Link to="/notifications" className="relative p-2.5 text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161b22] rounded-[10px] transition-all">
+        <Link to="/notifications" className="notification-button relative p-2.5 text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161b22] rounded-[10px] transition-all">
           <Bell className="w-4 h-4" />
           {hasUnread && (
-            <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-[#f85149] rounded-full ring-2 ring-[#080b12]" />
+            <span className="notification-dot absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-[#f85149] rounded-full border-2 border-[#080b12]" />
           )}
         </Link>
 

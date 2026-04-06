@@ -63,9 +63,8 @@ export const RealTimeNotifications = () => {
 
               // 2. Show the system notification (respecting preferences)
               showSystemNotification(notification);
-              
-              // 3. Mark as read immediately to stop polling it
-              api.markNotificationAsRead(notification.id);
+
+              // Keep notifications unread until the user views or opens them.
               processedIds.current.add(notification.id);
             }
           });

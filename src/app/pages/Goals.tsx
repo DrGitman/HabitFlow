@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Trophy, Plus, Clock, AlertTriangle, CheckCircle, TrendingUp, Edit2, Trash2, Link2 } from 'lucide-react';
 import { api } from '../services/api';
+import { toast } from 'sonner';
 
 interface Goal {
   id: number;
@@ -135,14 +136,21 @@ export default function Goals({ forceNew, onFormOpened, highlightId, onHighlight
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('Are you sure you want to delete this goal?')) {
-      try {
-        await api.deleteGoal(id);
-        fetchGoals();
-      } catch (e) {
-        console.error('Error deleting goal:', e);
-      }
-    }
+    toast.warning('Delete this goal?', {
+      action: {
+        label: 'Delete',
+        onClick: async () => {
+          try {
+            await api.deleteGoal(id);
+            fetchGoals();
+          } catch (e) {
+            console.error('Error deleting goal:', e);
+          }
+        }
+      },
+      cancel: { label: 'Cancel', onClick: () => {} },
+      duration: 8000,
+    });
   };
 
   const handleEdit = (goal: Goal) => {
@@ -170,7 +178,7 @@ export default function Goals({ forceNew, onFormOpened, highlightId, onHighlight
       
       // Compare just the dates without timezone issues
       if (selectedDate <= today) {
-        alert('Deadline must be at least 1 day in the future');
+        toast.error('Deadline must be at least 1 day in the future');
         return;
       }
     }

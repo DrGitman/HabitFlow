@@ -53,10 +53,21 @@ export default function Analytics() {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [progressData, setProgressData] = useState<ProgressData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isLightTheme, setIsLightTheme] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAnalytics();
+  }, []);
+
+  useEffect(() => {
+    const syncTheme = () => setIsLightTheme(document.body.classList.contains('light-theme'));
+    syncTheme();
+
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+    return () => observer.disconnect();
   }, []);
 
   const fetchAnalytics = async () => {
@@ -301,7 +312,7 @@ export default function Analytics() {
                         color: '#30363d',
                       },
                       pointLabels: {
-                        color: '#e6edf3',
+                        color: isLightTheme ? '#334155' : '#e6edf3',
                         font: { size: 13, weight: 'bold' },
                         padding: 15,
                       },

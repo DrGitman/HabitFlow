@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
+import { toast } from 'sonner';
 import { 
   User as UserIcon, 
   Mail, 
@@ -187,10 +188,10 @@ export default function Profile() {
       localStorage.setItem('auth_user', JSON.stringify(updatedUser));
       // Clear avatar preview after successful save
       setAvatarPreview(null);
-      alert('Profile updated successfully!');
+      toast.success('Profile updated successfully');
     } catch (error: any) {
       console.error('Error updating profile:', error);
-      alert(error.message || 'Failed to update profile.');
+      toast.error(error.message || 'Failed to update profile.');
     } finally {
       setSaving(false);
     }
@@ -214,7 +215,7 @@ export default function Profile() {
         current_password: passwordForm.current,
         new_password: passwordForm.new
       });
-      alert('Password changed successfully!');
+      toast.success('Password changed successfully');
       setIsPasswordModalOpen(false);
       setPasswordForm({ current: '', new: '', confirm: '' });
     } catch (error: any) {
@@ -228,7 +229,7 @@ export default function Profile() {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 1024 * 1024) {
-        alert('File size must be less than 1MB');
+        toast.error('File size must be less than 1MB');
         return;
       }
       const reader = new FileReader();

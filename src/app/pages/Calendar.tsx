@@ -37,6 +37,7 @@ interface CalendarEvent {
   title: string;
   date: string;
   is_completed: boolean;
+  source_item_id?: number;
   priority?: string;
   category?: string;
   description?: string;
@@ -45,15 +46,15 @@ interface CalendarEvent {
 
 // Plan Now Modal Component
 function PlanNowModal({ isOpen, onClose, onConfirm }: { isOpen: boolean; onClose: () => void; onConfirm: (items: any[], date: string) => void }) {
-  const [step, setStep] = useState<'select-date' | 'select-items' | 'preview'>('select-date');
+  const [step, setStep] = useState<'select-date' | 'select-items' | 'set-times' | 'preview'>('select-date');
   const [selectedDate, setSelectedDate] = useState<string>(format(startOfToday(), 'yyyy-MM-dd'));
+  const [selectedDateOption, setSelectedDateOption] = useState<'today' | 'tomorrow' | 'custom'>('today');
+  const [showCustomDate, setShowCustomDate] = useState(false);
   const [unscheduledItems, setUnscheduledItems] = useState<any>({ tasks: [], habits: [] });
   const [selectedTasks, setSelectedTasks] = useState<number[]>([]);
   const [selectedHabits, setSelectedHabits] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
-  const [autoSchedule, setAutoSchedule] = useState(false);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [scheduleTime, setScheduleTime] = useState({ start: '09:00', end: '18:00' });
+  const [itemTimes, setItemTimes] = useState<Record<string, { start: string; end: string }>>({});
 
   const dateOptions = [
     { label: 'Today', date: format(startOfToday(), 'yyyy-MM-dd') },
@@ -72,17 +73,11 @@ function PlanNowModal({ isOpen, onClose, onConfirm }: { isOpen: boolean; onClose
 
   const handleDateSelect = (date: string) => {
     if (date === 'custom') {
-      const input = document.createElement('input');
-      input.type = 'date';
-      input.value = selectedDate;
-      input.showPicker?.();
-      input.onchange = (e: any) => {
-        if (e.target.value) {
-          setSelectedDate(e.target.value);
-        }
-      };
-      input.click();
+      setSelectedDateOption('custom');
+      setShowCustomDate(true);
     } else {
+      setSelectedDateOption(date === format(startOfToday(), 'yyyy-MM-dd') ? 'today' : 'tomorrow');
+      setShowCustomDate(false);
       setSelectedDate(date);
     }
   };
@@ -92,52 +87,84 @@ function PlanNowModal({ isOpen, onClose, onConfirm }: { isOpen: boolean; onClose
       fetchUnscheduled();
       setStep('select-items');
     } else if (step === 'select-items') {
-      if (autoSchedule) {
-        generateAutoSchedule();
-      } else {
-        setStep('preview');
+      const defaultTimes = getSelectedItems().reduce((acc: Record<string, { start: string; end: string }>, item: any) => {
+        const key = `${item.item_type}-${item.item_id}`;
+        acc[key] = itemTimes[key] || {
+          start: '09:00',
+          end: item.item_type === 'habit' ? '09:15' : '09:30'
+        };
+        return acc;
+      }, {});
+      setItemTimes(defaultTimes);
+      setStep('set-times');
+    } else if (step === 'set-times') {
+      const allSelections = getSelectedItems();
+      const hasMissingTimes = allSelections.some((item: any) => {
+        const key = `${item.item_type}-${item.item_id}`;
+        return !itemTimes[key]?.start || !itemTimes[key]?.end;
+      });
+      const hasInvalidRange = allSelections.some((item: any) => {
+        const key = `${item.item_type}-${item.item_id}`;
+        return (itemTimes[key]?.start || '') >= (itemTimes[key]?.end || '');
+      });
+
+      if (hasMissingTimes || hasInvalidRange) {
+        return;
       }
+
+      setStep('preview');
     }
   };
 
-  const generateAutoSchedule = async () => {
-    setLoading(true);
-    try {
-      const data = await api.autoSchedule({
-        scheduled_date: selectedDate,
-        task_ids: selectedTasks,
-        habit_ids: selectedHabits,
-        start_time: scheduleTime.start,
-        end_time: scheduleTime.end,
-        slot_duration: 30
-      });
-      setSuggestions((data as any).suggestions || []);
-      setStep('preview');
-    } catch (e) { console.error(e); }
-    setLoading(false);
+  const getSelectedItems = () => [
+    ...selectedTasks.map(id => {
+      const task = (unscheduledItems.tasks as any[])?.find((t: any) => t.id === id);
+      return task ? { item_type: 'task', item_id: id, title: task.title, duration_minutes: 30 } : null;
+    }),
+    ...selectedHabits.map(id => {
+      const habit = (unscheduledItems.habits as any[])?.find((h: any) => h.id === id);
+      return habit ? { item_type: 'habit', item_id: id, title: habit.name, duration_minutes: 15 } : null;
+    })
+  ].filter(Boolean) as any[];
+
+  const formatTimeLabel = (timeValue?: string) => {
+    if (!timeValue) return '';
+    const [hours, minutes] = timeValue.split(':').map(Number);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return timeValue;
+    const suffix = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = hours % 12 || 12;
+    return `${hour12.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${suffix}`;
+  };
+
+  const getDurationMinutes = (start: string, end: string) => {
+    const [startHour, startMinute] = start.split(':').map(Number);
+    const [endHour, endMinute] = end.split(':').map(Number);
+    return ((endHour * 60) + endMinute) - ((startHour * 60) + startMinute);
   };
 
   const handleConfirm = () => {
-    const items = [
-      ...selectedTasks.map(id => ({ item_type: 'task', item_id: id, scheduled_date: selectedDate, duration_minutes: 30, scheduled_time: undefined })),
-      ...selectedHabits.map(id => ({ item_type: 'habit', item_id: id, scheduled_date: selectedDate, duration_minutes: 15, scheduled_time: undefined }))
-    ];
-    
-    if (autoSchedule && suggestions.length > 0) {
-      items.forEach((item, i) => {
-        if (suggestions[i]) {
-          item.scheduled_time = suggestions[i].scheduled_time;
-          item.duration_minutes = suggestions[i].duration_minutes;
-        }
-      });
-    }
+    const items = getSelectedItems().map((item: any) => {
+      const key = `${item.item_type}-${item.item_id}`;
+      const timeRange = itemTimes[key];
+      return {
+        item_type: item.item_type,
+        item_id: item.item_id,
+        title: item.title,
+        scheduled_date: selectedDate,
+        scheduled_time: timeRange.start,
+        duration_minutes: getDurationMinutes(timeRange.start, timeRange.end)
+      };
+    });
     
     onConfirm(items, selectedDate);
     onClose();
     setStep('select-date');
+    setSelectedDateOption('today');
+    setSelectedDate(format(startOfToday(), 'yyyy-MM-dd'));
+    setShowCustomDate(false);
     setSelectedTasks([]);
     setSelectedHabits([]);
-    setSuggestions([]);
+    setItemTimes({});
   };
 
   const toggleTask = (id: number) => {
@@ -146,6 +173,18 @@ function PlanNowModal({ isOpen, onClose, onConfirm }: { isOpen: boolean; onClose
 
   const toggleHabit = (id: number) => {
     setSelectedHabits(prev => prev.includes(id) ? prev.filter(h => h !== id) : [...prev, id]);
+  };
+
+  const updateItemTime = (itemType: string, itemId: number, field: 'start' | 'end', value: string) => {
+    const key = `${itemType}-${itemId}`;
+    setItemTimes(prev => ({
+      ...prev,
+      [key]: {
+        start: prev[key]?.start || '09:00',
+        end: prev[key]?.end || '09:30',
+        [field]: value
+      }
+    }));
   };
 
   if (!isOpen) return null;
@@ -170,7 +209,9 @@ function PlanNowModal({ isOpen, onClose, onConfirm }: { isOpen: boolean; onClose
                     key={opt.label}
                     onClick={() => handleDateSelect(opt.date)}
                     className={`p-4 rounded-[12px] border text-[14px] font-medium transition-all ${
-                      selectedDate === opt.date || (opt.date === 'custom' && !dateOptions.find(d => d.date === selectedDate))
+                      (opt.date === 'custom' && selectedDateOption === 'custom') ||
+                      (opt.label === 'Today' && selectedDateOption === 'today') ||
+                      (opt.label === 'Tomorrow' && selectedDateOption === 'tomorrow')
                         ? 'bg-[#7c79ff] border-[#7c79ff] text-white'
                         : 'bg-[#0d1117] border-[#30363d] text-[#8b949e] hover:border-[#7c79ff]'
                     }`}
@@ -179,12 +220,17 @@ function PlanNowModal({ isOpen, onClose, onConfirm }: { isOpen: boolean; onClose
                   </button>
                 ))}
               </div>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-full bg-[#0d1117] text-[#dae2fd] px-4 py-3 rounded-[12px] border border-[#30363d] focus:border-[#7d79ff] focus:ring-1 focus:ring-[#7d79ff] outline-none transition-all text-[14px]"
-              />
+              {showCustomDate && (
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value);
+                    setSelectedDateOption('custom');
+                  }}
+                  className="w-full bg-[#0d1117] text-[#dae2fd] px-4 py-3 rounded-[12px] border border-[#30363d] focus:border-[#7d79ff] focus:ring-1 focus:ring-[#7d79ff] outline-none transition-all text-[14px]"
+                />
+              )}
             </div>
           )}
 
@@ -194,39 +240,7 @@ function PlanNowModal({ isOpen, onClose, onConfirm }: { isOpen: boolean; onClose
                 <p className="text-[#8b949e] text-[14px]">
                   {format(new Date(selectedDate), 'EEEE, MMM d')}
                 </p>
-                <label className="flex items-center gap-2 text-[14px] text-[#8b949e] cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={autoSchedule} 
-                    onChange={(e) => setAutoSchedule(e.target.checked)}
-                    className="w-4 h-4 rounded border-[#30363d] bg-[#0d1117] accent-[#7d79ff] cursor-pointer"
-                  />
-                  Auto-schedule
-                </label>
               </div>
-
-              {autoSchedule && (
-                <div className="flex gap-4">
-                  <div className="flex-1">
-                    <label className="text-[11px] text-[#8b949e] uppercase tracking-wider">Start</label>
-                    <input 
-                      type="time" 
-                      value={scheduleTime.start}
-                      onChange={(e) => setScheduleTime({...scheduleTime, start: e.target.value})}
-                      className="w-full bg-[#0d1117] text-[#dae2fd] px-3 py-2 rounded-[8px] border border-[#ffffff0a] focus:border-[#7d79ff] focus:ring-1 focus:ring-[#7d79ff] outline-none transition-all text-[14px]"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-[11px] text-[#8b949e] uppercase tracking-wider">End</label>
-                    <input 
-                      type="time" 
-                      value={scheduleTime.end}
-                      onChange={(e) => setScheduleTime({...scheduleTime, end: e.target.value})}
-                      className="w-full bg-[#0d1117] text-[#dae2fd] px-3 py-2 rounded-[8px] border border-[#ffffff0a] focus:border-[#7d79ff] focus:ring-1 focus:ring-[#7d79ff] outline-none transition-all text-[14px]"
-                    />
-                  </div>
-                </div>
-              )}
 
               {loading ? (
                 <div className="flex justify-center py-8">
@@ -297,6 +311,48 @@ function PlanNowModal({ isOpen, onClose, onConfirm }: { isOpen: boolean; onClose
             </div>
           )}
 
+          {step === 'set-times' && (
+            <div className="space-y-4">
+              <p className="text-[#8b949e] text-[14px]">Set a start and end time for each selected item.</p>
+              <div className="space-y-3">
+                {getSelectedItems().map((item: any) => {
+                  const key = `${item.item_type}-${item.item_id}`;
+                  const timeRange = itemTimes[key] || { start: '09:00', end: item.item_type === 'habit' ? '09:15' : '09:30' };
+                  return (
+                    <div key={key} className="p-4 bg-[#0d1117] rounded-[10px] border border-[#30363d] space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[#e6edf3] text-[14px] font-medium">{item.title}</p>
+                          <p className="text-[#8b949e] text-[11px] uppercase tracking-wider">{item.item_type}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] text-[#8b949e] uppercase tracking-wider">Start time</label>
+                          <input
+                            type="time"
+                            value={timeRange.start}
+                            onChange={(e) => updateItemTime(item.item_type, item.item_id, 'start', e.target.value)}
+                            className="w-full mt-1 bg-[#161b22] text-[#dae2fd] px-3 py-2 rounded-[8px] border border-[#30363d] focus:border-[#7d79ff] focus:ring-1 focus:ring-[#7d79ff] outline-none transition-all text-[14px]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] text-[#8b949e] uppercase tracking-wider">End time</label>
+                          <input
+                            type="time"
+                            value={timeRange.end}
+                            onChange={(e) => updateItemTime(item.item_type, item.item_id, 'end', e.target.value)}
+                            className="w-full mt-1 bg-[#161b22] text-[#dae2fd] px-3 py-2 rounded-[8px] border border-[#30363d] focus:border-[#7d79ff] focus:ring-1 focus:ring-[#7d79ff] outline-none transition-all text-[14px]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {step === 'preview' && (
             <div className="space-y-4">
               <p className="text-[#8b949e] text-[14px]">
@@ -304,30 +360,25 @@ function PlanNowModal({ isOpen, onClose, onConfirm }: { isOpen: boolean; onClose
               </p>
 
               <div className="space-y-2">
-                {(autoSchedule ? suggestions : [
-                  ...selectedTasks.map(id => {
-                    const task = (unscheduledItems.tasks as any[])?.find((t: any) => t.id === id);
-                    return task ? { type: 'task', ...task } : null;
-                  }),
-                  ...selectedHabits.map(id => {
-                    const habit = (unscheduledItems.habits as any[])?.find((h: any) => h.id === id);
-                    return habit ? { type: 'habit', ...habit } : null;
-                  })
-                ]).filter(Boolean).map((item: any, i: number) => (
-                  <div key={i} className="flex items-center gap-3 p-3 bg-[#0d1117] rounded-[10px] border border-[#30363d]">
-                    <div className={`w-2 h-2 rounded-full ${item.type === 'task' ? 'bg-[#58a6ff]' : 'bg-[#39d353]'}`} />
-                    <span className="text-[#8b949e] text-[12px] w-16">
-                      {item.scheduled_time || 'No time'}
-                    </span>
-                    <div className="flex-1">
-                      <p className="text-[#e6edf3] text-[14px]">{item.title}</p>
-                      <p className="text-[#8b949e] text-[11px]">{item.duration_minutes || 30} min</p>
+                {getSelectedItems().map((item: any, i: number) => {
+                  const key = `${item.item_type}-${item.item_id}`;
+                  const timeRange = itemTimes[key];
+                  return (
+                    <div key={i} className="flex items-center gap-3 p-3 bg-[#0d1117] rounded-[10px] border border-[#30363d]">
+                      <div className={`w-2 h-2 rounded-full ${item.item_type === 'task' ? 'bg-[#58a6ff]' : 'bg-[#39d353]'}`} />
+                      <span className="text-[#8b949e] text-[12px] w-20">
+                        {formatTimeLabel(timeRange?.start)}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-[#e6edf3] text-[14px]">{item.title}</p>
+                        <p className="text-[#8b949e] text-[11px]">{formatTimeLabel(timeRange?.start)} - {formatTimeLabel(timeRange?.end)}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
-              {((autoSchedule ? suggestions : []).length === 0 && selectedTasks.length === 0 && selectedHabits.length === 0) && (
+              {(selectedTasks.length === 0 && selectedHabits.length === 0) && (
                 <p className="text-center text-[#8b949e] py-4">No items selected</p>
               )}
             </div>
@@ -338,8 +389,11 @@ function PlanNowModal({ isOpen, onClose, onConfirm }: { isOpen: boolean; onClose
           {step === 'select-items' && (
             <button onClick={() => setStep('select-date')} className="text-[#8b949e] text-[14px] font-medium">Back</button>
           )}
-          {step === 'preview' && (
+          {step === 'set-times' && (
             <button onClick={() => setStep('select-items')} className="text-[#8b949e] text-[14px] font-medium">Back</button>
+          )}
+          {step === 'preview' && (
+            <button onClick={() => setStep('set-times')} className="text-[#8b949e] text-[14px] font-medium">Back</button>
           )}
           {step === 'select-date' && <div />}
 
@@ -367,7 +421,7 @@ function EventDetailModal({ event, isOpen, onClose }: { event: CalendarEvent | n
   if (!isOpen || !event) return null;
 
   const handleGoToItem = () => {
-    navigate('/actions', { state: { highlightId: event.id, type: event.type } });
+    navigate('/actions', { state: { highlightId: event.source_item_id || event.id, type: event.type } });
     onClose();
   };
 
@@ -440,6 +494,20 @@ export default function Calendar() {
   const [calendarStats, setCalendarStats] = useState<any>(null);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [scheduledItems, setScheduledItems] = useState<any[]>([]);
+
+  const formatUpcomingTime = (task: any) => {
+    if (task?.scheduled_time) {
+      const timeValue = String(task.scheduled_time).slice(0, 5);
+      const [hours, minutes] = timeValue.split(':').map(Number);
+      if (!Number.isNaN(hours) && !Number.isNaN(minutes)) {
+        const suffix = hours >= 12 ? 'PM' : 'AM';
+        const hour12 = hours % 12 || 12;
+        return `${hour12.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${suffix}`;
+      }
+    }
+
+    return 'No time';
+  };
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [quote, setQuote] = useState("Consistency is the mother of mastery.");
@@ -485,6 +553,8 @@ export default function Calendar() {
     try {
       await api.confirmScheduledItems(items);
       fetchScheduledItems();
+      fetchUpcomingTasks();
+      fetchCalendarData();
     } catch (e) { console.error(e); }
   };
 
@@ -593,18 +663,21 @@ export default function Calendar() {
     const allDays = eachDayOfInterval({ start: startDate, end: endDate });
 
     return (
-      <div className="grid grid-cols-7 border-t border-l border-[#30363d]">
+      <div className="calendar-grid grid grid-cols-7 border-t border-l border-[#30363d]">
         {allDays.map((d, i) => {
           const formattedDate = format(d, 'yyyy-MM-dd');
           const dayEvents = events.filter(e => e.date === formattedDate);
           const dayScheduled = scheduledItems.filter(s => s.scheduled_date === formattedDate && s.is_confirmed).map(s => ({
             id: s.id,
+            source_item_id: s.item_id,
             type: s.item_type,
             title: s.title,
             date: s.scheduled_date,
             is_completed: false,
             scheduled_time: s.scheduled_time,
-            priority: 'scheduled'
+            priority: s.priority || 'scheduled',
+            category: s.category,
+            description: s.description
           }));
           const allDayEvents = [...dayEvents, ...dayScheduled];
           const isCurrentMonth = isSameMonth(d, monthStart);
@@ -615,7 +688,7 @@ export default function Calendar() {
             <div
               key={i}
               onClick={() => setSelectedDate(d)}
-              className={`min-h-[140px] p-3 border-r border-b border-[#30363d] transition-all cursor-pointer relative group ${
+              className={`calendar-grid-cell min-h-[140px] p-3 border-r border-b border-[#30363d] transition-all cursor-pointer relative group ${
                 !isCurrentMonth ? 'bg-[#0d1117]/30' : 'bg-[#0d1117]'
               } ${isSelected ? 'ring-2 ring-inset ring-[#58a6ff]/50 bg-[#161b22]' : 'hover:bg-[#161b22]/50'}`}
             >
@@ -654,7 +727,7 @@ export default function Calendar() {
       <div className="grid grid-cols-7 h-full border-t border-l border-[#30363d]">
         {days.map((d, i) => {
           const formattedDate = format(d, 'yyyy-MM-dd');
-          const dayEvents = [...events, ...scheduledItems.map(s => ({ ...s, type: s.item_type, date: s.scheduled_date, priority: 'scheduled' }))].filter(e => e.date === formattedDate);
+          const dayEvents = [...events, ...scheduledItems.map(s => ({ ...s, source_item_id: s.item_id, type: s.item_type, date: s.scheduled_date, priority: s.priority || 'scheduled' }))].filter(e => e.date === formattedDate);
           return (
             <div key={i} className={`flex-1 border-r border-[#30363d] p-4 bg-[#0d1117] ${isToday(d) ? 'bg-[#161b22]' : ''}`}>
                <div className="text-center mb-6">
@@ -678,7 +751,7 @@ export default function Calendar() {
 
   const renderDayView = () => {
     const formattedDate = format(selectedDate, 'yyyy-MM-dd');
-    const dayEvents = [...events, ...scheduledItems.map(s => ({ ...s, type: s.item_type, date: s.scheduled_date, priority: 'scheduled' }))].filter(e => e.date === formattedDate);
+    const dayEvents = [...events, ...scheduledItems.map(s => ({ ...s, source_item_id: s.item_id, type: s.item_type, date: s.scheduled_date, priority: s.priority || 'scheduled' }))].filter(e => e.date === formattedDate);
     return (
       <div className="flex flex-col h-full bg-[#0d1117] p-8">
         <div className="mb-8">
@@ -719,7 +792,7 @@ export default function Calendar() {
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {upcomingTasks.length > 0 ? upcomingTasks.slice(0, 3).map((task: any) => (
           <div key={task.id}>
-            <p className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">{task.due_date ? format(new Date(task.due_date), 'hh:mm a') : 'No time'}</p>
+            <p className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">{formatUpcomingTime(task)}</p>
             <div className={`bg-[#161b22] rounded-[10px] p-4 group hover:border-[#ffffff1a] transition-all border ${task.is_completed ? 'border-[#39d353]/30' : 'border-[#ffffff0a]'}`}>
               <div className="flex justify-between items-start mb-2">
                 <h4 className="text-[#ffffff] text-[14px] font-bold">{task.title}</h4>
@@ -730,18 +803,18 @@ export default function Calendar() {
           </div>
         )) : <p className="text-[#8b949e] text-[12px]">No upcoming tasks</p>}
         <div className="pt-4">
-          <div className="rounded-[16px] bg-gradient-to-br from-[#161b22] to-[#0d1117] border border-[#ffffff0a] p-6 shadow-xl relative overflow-hidden group">
+          <div className="daily-grind-card rounded-[16px] bg-gradient-to-br from-[#161b22] to-[#0d1117] border border-[#ffffff0a] p-6 shadow-xl relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-24 h-24 bg-[#7d79ff] opacity-5 rounded-full blur-2xl -mr-10 -mt-10 transition-opacity group-hover:opacity-10" />
             <div className="flex items-center gap-2 mb-3">
               <Zap className="w-4 h-4 text-[#7d79ff]" />
-              <span className="text-[#8b949e] text-[9px] uppercase tracking-[0.2em] font-black">Daily Grind</span>
+              <span className="daily-grind-card-label text-[#8b949e] text-[9px] uppercase tracking-[0.2em] font-black">Daily Grind</span>
             </div>
-            <p className="text-[#e6edf3] text-[13px] font-medium leading-relaxed z-10 relative">"{quote}"</p>
+            <p className="daily-grind-card-quote text-[#e6edf3] text-[13px] font-medium leading-relaxed z-10 relative">"{quote}"</p>
           </div>
         </div>
       </div>
       <div className="p-6">
-        <button onClick={() => setShowPlanModal(true)} className="w-full bg-[#2d3449] hover:bg-[#3b434b] text-[#e6edf3] font-medium py-3 rounded-[8px] flex items-center justify-center gap-2"><CalendarIcon className="w-4 h-4 text-[#7d79ff]" /><span>Plan Now</span></button>
+        <button onClick={() => setShowPlanModal(true)} className="calendar-plan-button w-full bg-[#2d3449] hover:bg-[#3b434b] text-[#e6edf3] font-medium py-3 rounded-[8px] flex items-center justify-center gap-2"><CalendarIcon className="w-4 h-4 text-[#7d79ff]" /><span>Plan Now</span></button>
       </div>
     </div>
   );
@@ -762,7 +835,7 @@ export default function Calendar() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
            <div className="bg-[#11141d] rounded-[16px] p-6 border border-[#ffffff0a]"><h4 className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">Focus Score</h4><div className="flex items-end gap-2"><span className="text-[32px] font-bold text-[#ffffff] leading-none">{calendarStats?.focus_score || 0}%</span><span className={`text-[12px] font-medium mb-1 ${(calendarStats?.focus_change || 0) >= 0 ? 'text-[#39d353]' : 'text-[#f85149]'}`}>{(calendarStats?.focus_change || 0) >= 0 ? '+' : ''}{calendarStats?.focus_change || 0}% vs last month</span></div></div>
            <div className="bg-[#11141d] rounded-[16px] p-6 border border-[#ffffff0a]"><h4 className="text-[#8b949e] text-[10px] font-bold uppercase tracking-wider mb-2">Top Habit</h4><div className="flex items-center gap-3 mt-1"><div className="w-8 h-8 rounded-full bg-[#2ea043]/20 flex items-center justify-center"><CheckCircle2 className="w-4 h-4 text-[#39d353]" /></div><div><h5 className="text-[#ffffff] text-[14px] font-bold">{calendarStats?.top_habit?.name || 'No habits'}</h5><p className="text-[#8b949e] text-[11px]">{calendarStats?.top_habit?.completions || 0}/{calendarStats?.top_habit?.total_days || 0} days completed</p></div></div></div>
-           <div className="bg-[#7d79ff] rounded-[16px] p-6 shadow-lg"><h4 className="text-[#e6edf3] text-[10px] font-bold uppercase tracking-wider opacity-80 mb-2">Current Streak</h4><div className="flex items-end gap-2"><span className="text-[32px] font-bold text-[#ffffff] leading-none">{calendarStats?.current_streak || 0}</span><span className="text-[#e6edf3] opacity-80 text-[12px] font-medium mb-1">Days in a row</span></div></div>
+           <div className="calendar-streak-card bg-[#7d79ff] rounded-[16px] p-6 shadow-lg"><h4 className="text-white text-[10px] font-bold uppercase tracking-wider opacity-80 mb-2">Current Streak</h4><div className="flex items-end gap-2"><span className="text-[32px] font-bold text-white leading-none">{calendarStats?.current_streak || 0}</span><span className="text-white opacity-80 text-[12px] font-medium mb-1">Days in a row</span></div></div>
         </div>
        </div>
       {renderSidebar()}
