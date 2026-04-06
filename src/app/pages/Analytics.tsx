@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { Chart as ChartJS, LineElement, PointElement, Tooltip as ChartJSTooltip, Legend as ChartJSLegend, RadialLinearScale, Filler } from 'chart.js';
 import { Chart as ChartComponent } from 'react-chartjs-2';
-import { TrendingUp, Award, Target, Zap, Activity, PieChart, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, Award, Target, Zap, Activity, PieChart, Info } from 'lucide-react';
 
 // Register Chart.js components
 ChartJS.register(
@@ -129,9 +129,15 @@ export default function Analytics() {
         </div>
         {summary?.momentum !== undefined && (
           <div className="flex items-center gap-3 bg-[#161b22] px-4 py-2 rounded-full border border-[#30363d]">
-            <TrendingUp className={`w-4 h-4 ${summary.momentum >= 0 ? 'text-[#39d353]' : 'text-[#f85149]'}`} />
+            {summary.momentum >= 0 ? (
+              <TrendingUp className="w-4 h-4 text-[#39d353]" />
+            ) : (
+              <TrendingDown className="w-4 h-4 text-[#f85149]" />
+            )}
             <span className="text-[12px] font-black text-[#e6edf3]">
-              Momentum: <span className={summary.momentum >= 0 ? 'text-[#39d353]' : 'text-[#f85149]'}>+{summary.momentum}%</span> vs last week
+              Momentum: <span className={summary.momentum >= 0 ? 'text-[#39d353]' : 'text-[#f85149]'}>
+                {summary.momentum >= 0 ? '+' : ''}{summary.momentum}%
+              </span> vs last week
             </span>
           </div>
         )}

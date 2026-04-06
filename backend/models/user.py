@@ -47,3 +47,10 @@ class User:
         values.append(user_id)
         query = f"UPDATE users SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE id = %s RETURNING *"
         return execute_query(query, tuple(values), fetch_one=True)
+
+    @staticmethod
+    def delete(user_id):
+        """Delete user and all cascading data"""
+        query = "DELETE FROM users WHERE id = %s"
+        execute_query(query, (user_id,))
+        return True

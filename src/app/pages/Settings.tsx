@@ -21,8 +21,8 @@ interface Preferences {
   weekly_summary_emails: boolean;
   notification_reminders: boolean;
   notification_achievements: boolean;
-  privacy_show_rank: boolean;
-  privacy_share_stats: boolean;
+  profile_visibility: string;
+  anonymous_analytics: boolean;
 }
 
 const Toggle = ({ active, onClick, loading }: { active: boolean; onClick: () => void; loading?: boolean }) => (
@@ -256,14 +256,24 @@ export default function Settings() {
                         <Shield className="w-5 h-5 text-[#7c79ff]" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-[#e6edf3] text-[15px] font-bold">Show Rank on Profile</span>
-                        <span className="text-[#8b949e] text-[12px] font-medium">Allow other users to see your global architect rank</span>
+                        <span className="text-[#e6edf3] text-[15px] font-bold">Profile Visibility</span>
+                        <span className="text-[#8b949e] text-[12px] font-medium">Control who can see your stats (currently {prefs.profile_visibility})</span>
                       </div>
                     </div>
                     <Toggle 
-                      active={prefs.privacy_show_rank} 
-                      onClick={() => togglePreference('privacy_show_rank')} 
-                      loading={updatingField === 'privacy_show_rank'} 
+                      active={prefs.profile_visibility === 'public'} 
+                      onClick={async () => {
+                        setUpdatingField('profile_visibility');
+                        try {
+                          const newVis = prefs.profile_visibility === 'public' ? 'private' : 'public';
+                          const updated = await api.updateUserPreferences({ profile_visibility: newVis });
+                          setPrefs(updated as Preferences);
+                          toast.success('Privacy updated');
+                        } catch(e) {
+                          toast.error('Update failed');
+                        } finally { setUpdatingField(null); }
+                      }} 
+                      loading={updatingField === 'profile_visibility'} 
                     />
                   </div>
                 </div>
@@ -275,15 +285,48 @@ export default function Settings() {
                         <Zap className="w-5 h-5 text-[#f85149]" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-[#e6edf3] text-[15px] font-bold">Share Progress Statistics</span>
-                        <span className="text-[#8b949e] text-[12px] font-medium">Contribute anonymized data to global community charts</span>
+                        <span className="text-[#e6edf3] text-[15px] font-bold">Anonymous Analytics</span>
+                        <span className="text-[#8b949e] text-[12px] font-medium">Help us improve by sharing completely anonymized usage data</span>
                       </div>
                     </div>
                     <Toggle 
-                      active={prefs.privacy_share_stats} 
-                      onClick={() => togglePreference('privacy_share_stats')} 
-                      loading={updatingField === 'privacy_share_stats'} 
+                      active={prefs.anonymous_analytics} 
+                      onClick={() => togglePreference('anonymous_analytics')} 
+                      loading={updatingField === 'anonymous_analytics'} 
                     />
+                  </div>
+                </div>
+
+                {/* Danger Zone */}
+                <div className="mt-8 border border-[#d4183d40] bg-[#d4183d0a] rounded-[20px] p-6 group">
+                  <div className="flex flex-col gap-[16px]">
+                    <div className="flex flex-col gap-[4px]">
+                      <span className="text-[#ff7b72] text-[16px] font-bold">Danger Zone</span>
+                      <span className="text-[#8b949e] text-[13px]">Irreversible and destructive actions.</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#e6edf3] text-[15px] font-medium">Delete Account</span>
+                      <button
+                        onClick={async () => {
+                          if (window.confirm("Are you absolutely sure? This will delete all your data forever.")) {
+                            try {
+                              const token = localStorage.getItem('token');
+                              await fetch('http://localhost:5000/api/profile', {
+                                method: 'DELETE',
+                                headers: { 'Authorization': `Bearer ${token}` }
+                              });
+                              localStorage.removeItem('token');
+                              window.location.href = '/login';
+                            } catch(e) {
+                              toast.error("Failed to delete account");
+                            }
+                          }
+                        }}
+                        className="bg-[#da3633] hover:bg-[#b32b28] text-white px-4 py-2 rounded-[8px] text-[14px] font-bold transition-all"
+                      >
+                        Delete everything
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

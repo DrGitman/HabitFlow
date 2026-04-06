@@ -2,80 +2,78 @@
 
 :root {
   --font-size: 16px;
-  --background: #ffffff;
-  --foreground: oklch(0.145 0 0);
-  --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: #030213;
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.95 0.0058 264.53);
-  --secondary-foreground: #030213;
-  --muted: #ececf0;
-  --muted-foreground: #717182;
-  --accent: #e9ebef;
-  --accent-foreground: #030213;
+  --background: #1B1622;
+  --foreground: #FFFFFF;
+  --card: #282136;
+  --card-foreground: #FFFFFF;
+  --popover: #282136;
+  --popover-foreground: #FFFFFF;
+  --primary: #6F01EC;
+  --primary-foreground: #FFFFFF;
+  --secondary: #3F334B;
+  --secondary-foreground: #FFFFFF;
+  --muted: #3F334B;
+  --muted-foreground: #A199AD;
+  --accent: #282136;
+  --accent-foreground: #FFFFFF;
   --destructive: #d4183d;
   --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.1);
-  --input: transparent;
-  --input-background: #f3f3f5;
-  --switch-background: #cbced4;
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --border: #3F334B;
+  --input: #3F334B;
+  --ring: #6F01EC;
+  --glass-bg: rgba(40, 33, 54, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.05);
+  --chart-1: #6F01EC;
+  --chart-2: #39d353;
+  --chart-3: #f1e05a;
+  --chart-4: #bc8cff;
+  --chart-5: #f85149;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #030213;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #1B1622;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #6F01EC;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #282136;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #3F334B;
+  --sidebar-ring: #6F01EC;
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+.light-theme {
+  --background: #F4F5F7;
+  --foreground: #111827;
+  --card: #FFFFFF;
+  --card-foreground: #111827;
+  --popover: #FFFFFF;
+  --popover-foreground: #111827;
+  --primary: #7701FF;
+  --primary-foreground: #FFFFFF;
+  --secondary: #E5E7EB;
+  --secondary-foreground: #111827;
+  --muted: #F3F4F6;
+  --muted-foreground: #6B7280;
+  --accent: #D9DCE1;
+  --accent-foreground: #111827;
+  --destructive: #d73a49;
+  --destructive-foreground: #ffffff;
+  --border: #D9DCE1;
+  --input: #F3F4F6;
+  --ring: #7701FF;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.05);
+  --chart-1: #7701FF;
+  --chart-2: #28a745;
+  --chart-3: #dbab09;
+  --chart-4: #6f42c1;
+  --chart-5: #d73a49;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #111827;
+  --sidebar-primary: #7701FF;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F3F4F6;
+  --sidebar-accent-foreground: #111827;
+  --sidebar-border: #E5E7EB;
+  --sidebar-ring: #7701FF;
 }
 
 @theme inline {
@@ -178,4 +176,48 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+}
+
+/* 
+ * Light Theme Overrides 
+ * Dynamically maps the app's hardcoded dark hex classes to the light color palette!
+ */
+.light-theme .\!bg-\[\#11141d\],
+.light-theme .bg-\[\#11141d\],
+.light-theme .\!bg-\[\#0a0c10\],
+.light-theme .bg-\[\#0a0c10\] { background-color: #f6f7fb !important; }
+
+.light-theme .\!bg-\[\#161b22\],
+.light-theme .bg-\[\#161b22\] { background-color: #ffffff !important; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important; }
+
+.light-theme .\!bg-\[\#1c2128\],
+.light-theme .bg-\[\#1c2128\] { background-color: #f1f3f9 !important; border-color: #e6e8f0 !important; }
+
+.light-theme .\!bg-\[\#222a3d\],
+.light-theme .bg-\[\#222a3d\] { background-color: #eef0ff !important; color: #7d79ff !important; border-color: transparent !important; }
+
+.light-theme .\!bg-\[\#2d3449\],
+.light-theme .bg-\[\#2d3449\] { background-color: #e5e7eb !important; }
+
+.light-theme .\!text-\[\#e6edf3\],
+.light-theme .text-\[\#e6edf3\] { color: #1f2937 !important; }
+
+.light-theme .\!text-\[\#dae2fd\],
+.light-theme .text-\[\#dae2fd\] { color: #1f2937 !important; font-weight: bold !important; }
+
+.light-theme .\!text-\[\#8b949e\],
+.light-theme .text-\[\#8b949e\] { color: #6b7280 !important; }
+
+.light-theme .\!border-\[\#ffffff0a\],
+.light-theme .border-\[\#ffffff0a\],
+.light-theme .\!border-\[\#30363d\],
+.light-theme .border-\[\#30363d\] { border-color: #e6e8f0 !important; }
+
+/* Ensure icons and other unmapped grays align */
+.light-theme .text-\[\#c2c1ff\] { color: #7d79ff !important; font-weight: 600 !important; }
+.light-theme [class*="hover:bg-[#222a3d]"]:hover { background-color: #f1f3f9 !important; }
+
+/* Invert drop-shadows nicely for light mode */
+.light-theme [class*="shadow-"] {
+  box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.05) !important;
 }

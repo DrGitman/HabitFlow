@@ -7,6 +7,10 @@ import jwt
 import bcrypt
 import os
 from dotenv import load_dotenv
+from apscheduler.schedulers.background import BackgroundScheduler
+
+from email_service import send_email_with_pdf
+from pdf_service import generate_weekly_pdf
 
 from models.user import User
 from models.habit import Habit
@@ -938,6 +942,15 @@ async def update_avatar(data: dict, user_id: int = Depends(get_current_user_id))
     User.update(user_id, avatar_url=avatar_url)
     return {"avatar_url": avatar_url}
 
+@app.delete("/api/profile")
+async def delete_profile(user_id: int = Depends(get_current_user_id)):
+    user = User.find_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    User.delete(user_id)
+    return {"message": "Account successfully deleted"}
+
 async def sync_achievements(user_id: int):
     """Internal helper to evaluate and persist achievements"""
     try:
@@ -1301,6 +1314,71 @@ async def update_preferences(data: UserPreferences, user_id: int = Depends(get_c
         raise HTTPException(status_code=404, detail="Preferences not found")
         
     return updated[0]
+
+# --- Background Scheduler ---
+scheduler = BackgroundScheduler()
+
+def run_weekly_summaries():
+    print("Running weekly summaries...")
+    users = execute_query("SELECT * FROM users JOIN user_preferences ON users.id = user_preferences.user_id WHERE user_preferences.weekly_summary_emails = true")
+    if not users:
+        return
+        
+    for user in users:
+        try:
+            # Need to ensure we fetch metrics using sync DB calls or adapt get_analytics_metrics
+            # Because get_analytics_metrics is async. Since this is just a system run, we'll
+            # do simple fetching directly or call the sync equivalents if they exist.
+            from models.habit import Habit
+            from models.goal import Goal
+            from models.task import Task
+            
+            habits = Habit.calculate_all_metrics(user['id'])
+            goals = Goal.calculate_all_metrics(user['id'])
+            tasks = Task.calculate_metrics(user['id'])
+            
+            # Form simple mock metrics based on what pdf expects
+            avg_goal_progress = goals.get('average_goal_progress', 0)
+            avg_habit_consistency = 0
+            habits_data = habits.get('habits_data', [])
+            if habits_data:
+                avg_habit_consistency = sum(h.get('consistency', 0) for h in habits_data) / len(habits_data)
+            
+            productivity_score = round(
+                (0.5 * tasks['task_efficiency']) +
+                (0.3 * avg_habit_consistency) +
+                (0.2 * avg_goal_progress), 1
+            )
+            
+            metrics = {
+                'productivity_score': productivity_score,
+                'completed_tasks': tasks.get('completed_tasks', 0),
+                'total_habits': habits.get('total_habits', 0)
+            }
+            
+            pdf_bytes = generate_weekly_pdf(user.get('full_name') or user.get('email'), metrics, habits_data, goals.get('goals_data', []))
+            
+            html_body = f"""
+            <html><body>
+            <h2>Your Weekly HabitFlow Digest</h2>
+            <p>Hi {user.get('full_name') or 'User'},</p>
+            <p>Your weekly summary is ready. Please find the attached PDF report.</p>
+            <p>Keep up the great work!</p>
+            </body></html>
+            """
+            
+            send_email_with_pdf(user['email'], "Your HabitFlow Weekly Summary", html_body, pdf_bytes)
+        except Exception as e:
+            print(f"Failed to send weekly summary to {user['email']}: {e}")
+
+@app.on_event("startup")
+def start_scheduler():
+    scheduler.add_job(run_weekly_summaries, 'cron', day_of_week='sun', hour=8)
+    scheduler.start()
+    
+@app.on_event("shutdown")
+def stop_scheduler():
+    scheduler.shutdown()
 
 if __name__ == "__main__":
     import uvicorn
