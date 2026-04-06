@@ -179,45 +179,119 @@
 }
 
 /* 
- * Light Theme Overrides 
- * Dynamically maps the app's hardcoded dark hex classes to the light color palette!
+ * High-End Light Theme Overrides (Inspired by HTML reference)
  */
-.light-theme .\!bg-\[\#11141d\],
-.light-theme .bg-\[\#11141d\],
-.light-theme .\!bg-\[\#0a0c10\],
-.light-theme .bg-\[\#0a0c10\] { background-color: #f6f7fb !important; }
 
-.light-theme .\!bg-\[\#161b22\],
-.light-theme .bg-\[\#161b22\] { background-color: #ffffff !important; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important; }
-
-.light-theme .\!bg-\[\#1c2128\],
-.light-theme .bg-\[\#1c2128\] { background-color: #f1f3f9 !important; border-color: #e6e8f0 !important; }
-
-.light-theme .\!bg-\[\#222a3d\],
-.light-theme .bg-\[\#222a3d\] { background-color: #eef0ff !important; color: #7d79ff !important; border-color: transparent !important; }
-
-.light-theme .\!bg-\[\#2d3449\],
-.light-theme .bg-\[\#2d3449\] { background-color: #e5e7eb !important; }
-
-.light-theme .\!text-\[\#e6edf3\],
-.light-theme .text-\[\#e6edf3\] { color: #1f2937 !important; }
-
-.light-theme .\!text-\[\#dae2fd\],
-.light-theme .text-\[\#dae2fd\] { color: #1f2937 !important; font-weight: bold !important; }
-
-.light-theme .\!text-\[\#8b949e\],
-.light-theme .text-\[\#8b949e\] { color: #6b7280 !important; }
-
-.light-theme .\!border-\[\#ffffff0a\],
-.light-theme .border-\[\#ffffff0a\],
-.light-theme .\!border-\[\#30363d\],
-.light-theme .border-\[\#30363d\] { border-color: #e6e8f0 !important; }
-
-/* Ensure icons and other unmapped grays align */
-.light-theme .text-\[\#c2c1ff\] { color: #7d79ff !important; font-weight: 600 !important; }
-.light-theme [class*="hover:bg-[#222a3d]"]:hover { background-color: #f1f3f9 !important; }
-
-/* Invert drop-shadows nicely for light mode */
-.light-theme [class*="shadow-"] {
-  box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.05) !important;
+/* App Background & Panels (#F8FAFC - Slate 50) */
+.light-theme [class*="bg-[#0a0c10]"], 
+.light-theme [class*="bg-[#0a0c12]"],
+.light-theme [class*="bg-[#0b101a]"],
+.light-theme [class*="bg-[#0b1326]"],
+.light-theme [class*="bg-[#0d1117]"],
+.light-theme [class*="bg-[#0f1419]"],
+.light-theme [class*="bg-[#0f1520]"],
+.light-theme [class*="bg-[#11141d]"],
+.light-theme [class*="bg-[#131b2e]"],
+.light-theme [class*="bg-[#171f33]"],
+.light-theme [class*="bg-[#1c2540]"],
+.light-theme [class*="bg-[#1e2433]"] { 
+  background-color: #F8FAFC !important; 
 }
+
+/* Sidebar Background & Headers & Modals (#ffffff - Pure White) */
+.light-theme [class*="bg-[#080b12]"],
+.light-theme [class*="bg-[#1c2128]"] {
+  background-color: #ffffff !important; 
+}
+
+/* Cards & Components (#ffffff, border, shadow, rounded) */
+.light-theme [class*="bg-[#161b22]"]:not(a),
+.light-theme [class*="bg-[#21262d]"]:not(a) { 
+  background-color: #ffffff !important; 
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important; 
+  border-radius: 2rem !important;
+  border-color: #f1f5f9 !important; /* Slate 100 */
+}
+
+/* Sidebar Active Nav Item / Links */
+.light-theme a[class*="bg-[#161b22]"] {
+  background-color: #EEF2FF !important;
+  color: #7d79ff !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Primary Text (#1e293b Slate 800) */
+.light-theme [class*="text-[#e6edf3]"],
+.light-theme [class*="text-[#ffffff]"],
+.light-theme [class*="text-[#dae2fd]"] { 
+  color: #1e293b !important; 
+}
+
+/* Explicitly force text-white elements and elements inside purple buttons to remain Pure White */
+.light-theme button[class*="text-white"],
+.light-theme button[class*="text-white"] *,
+.light-theme .text-white,
+.light-theme [class*="text-white"],
+.light-theme [class*="bg-[#7c79ff]"] *,
+.light-theme button[class*="from-[#8e8cf7]"] * {
+  color: #ffffff !important;
+}
+
+/* Secondary / Muted Text (Slate 500 / Slate 400) */
+.light-theme [class*="text-[#8b949e]"] { color: #64748b !important; }
+.light-theme [class*="text-[#c7c4d7]"],
+.light-theme [class*="text-[#918fa0]"],
+.light-theme [class*="text-muted"] { color: #94a3b8 !important; }
+
+/* Keep Purple Brand Consistency */
+.light-theme [class*="bg-[#7c79ff]"] { background-color: #7d79ff !important; border-color: #7d79ff !important; }
+.light-theme [class*="text-[#7c79ff]"], 
+.light-theme [class*="text-[#c2c1ff]"] { color: #7d79ff !important; }
+.light-theme [class*="hover:bg-[#7c79ff]"]:hover { background-color: #6c68e8 !important; }
+
+/* Inputs & Forms (Slate 50) */
+.light-theme [class*="bg-[#2d3449]"], 
+.light-theme [class*="bg-[rgba(255,255,255,0.05)]"] { 
+  background-color: #F8FAFC !important; 
+  border-color: #e2e8f0 !important;
+}
+
+/* Secondary Buttons & Hover States */
+.light-theme [class*="bg-[#222a3d]"] { 
+  background-color: #F8FAFC !important; 
+  color: #64748b !important; 
+  border-color: transparent !important; 
+}
+
+/* Inactive Toggles (Slate 200) */
+.light-theme [class*="bg-[#30363d]"] {
+  background-color: #e2e8f0 !important;
+}
+
+/* Borders & Dividers (Slate 200) */
+.light-theme [class*="border-[#ffffff"],
+.light-theme [class*="border-[#30363d]"],
+.light-theme [class*="border-[#31394d]"],
+.light-theme [class*="border-[#3a4a5f]"],
+.light-theme [class*="border-[#3b434b]"],
+.light-theme [class*="border-[#444c56]"],
+.light-theme [class*="border-[#464554]"] { 
+  border-color: #e2e8f0 !important; 
+}
+
+/* Notification Dots (#ef4444) */
+.light-theme .bg-\[\#f85149\] {
+  background-color: #ef4444 !important;
+}
+
+/* Toasts */
+.light-theme [data-sonner-toast] [data-content] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #1e293b !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Logo Fixes */
+.light-theme img[src*="logo"] { filter: brightness(0) !important; }

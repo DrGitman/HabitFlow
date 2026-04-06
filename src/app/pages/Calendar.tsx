@@ -442,6 +442,28 @@ export default function Calendar() {
   const [scheduledItems, setScheduledItems] = useState<any[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [quote, setQuote] = useState("Consistency is the mother of mastery.");
+
+  useEffect(() => {
+    const PROVERBS = [
+      "Consistency is the mother of mastery.",
+      "Small daily improvements are the key to staggering long-term results.",
+      "Success is the sum of small efforts, repeated day in and day out.",
+      "The secret of your future is hidden in your daily routine.",
+      "First we make our habits, then our habits make us.",
+      "Motivation is what gets you started. Habit is what keeps you going.",
+      "Don't stop when you're tired. Stop when you're done.",
+      "We are what we repeatedly do. Excellence, then, is not an act, but a habit.",
+      "Discipline is choosing between what you want now and what you want most.",
+      "You do not rise to the level of your goals. You fall to the level of your systems.",
+      "A year from now you may wish you had started today.",
+      "Every action you take is a vote for the type of person you wish to become."
+    ];
+    const updateQuote = () => setQuote(PROVERBS[new Date().getHours() % PROVERBS.length]);
+    updateQuote();
+    const interval = setInterval(updateQuote, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     fetchCalendarData();
@@ -707,7 +729,16 @@ export default function Calendar() {
             </div>
           </div>
         )) : <p className="text-[#8b949e] text-[12px]">No upcoming tasks</p>}
-        <div className="pt-4"><div className="rounded-[12px] overflow-hidden relative group"><div className="absolute inset-0 bg-gradient-to-t from-[#0b101a] via-transparent to-transparent z-10" /><div className="w-full h-[120px] bg-[#222a3d] opacity-50" /><p className="absolute bottom-4 left-4 right-4 text-[#c7c4d7] text-[12px] font-medium z-20">"Consistency is the mother of mastery."</p></div></div>
+        <div className="pt-4">
+          <div className="rounded-[16px] bg-gradient-to-br from-[#161b22] to-[#0d1117] border border-[#ffffff0a] p-6 shadow-xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-[#7d79ff] opacity-5 rounded-full blur-2xl -mr-10 -mt-10 transition-opacity group-hover:opacity-10" />
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="w-4 h-4 text-[#7d79ff]" />
+              <span className="text-[#8b949e] text-[9px] uppercase tracking-[0.2em] font-black">Daily Grind</span>
+            </div>
+            <p className="text-[#e6edf3] text-[13px] font-medium leading-relaxed z-10 relative">"{quote}"</p>
+          </div>
+        </div>
       </div>
       <div className="p-6">
         <button onClick={() => setShowPlanModal(true)} className="w-full bg-[#2d3449] hover:bg-[#3b434b] text-[#e6edf3] font-medium py-3 rounded-[8px] flex items-center justify-center gap-2"><CalendarIcon className="w-4 h-4 text-[#7d79ff]" /><span>Plan Now</span></button>
