@@ -361,12 +361,8 @@ export default function Settings() {
                               label: 'Delete',
                               onClick: async () => {
                                 try {
-                                  const token = localStorage.getItem('token');
-                                  await fetch('http://localhost:5000/api/profile', {
-                                    method: 'DELETE',
-                                    headers: { 'Authorization': `Bearer ${token}` }
-                                  });
-                                  localStorage.removeItem('token');
+                                  await api.request('/api/profile', { method: 'DELETE' });
+                                  localStorage.removeItem('auth_token');
                                   window.location.href = '/login';
                                 } catch(e) {
                                   toast.error('Failed to delete account');

@@ -152,8 +152,8 @@ async def signup(data: UserSignup):
     password_hash = bcrypt.hashpw(data.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     user = User.create(data.email, password_hash, data.full_name)
     
-    # Initialize user preferences
-    execute_query("INSERT INTO user_preferences (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user['id'],))
+    # Initialize user preferences (fetch_all=False: no rows returned by INSERT)
+    execute_query("INSERT INTO user_preferences (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user['id'],), fetch_all=False)
     
     token = create_token(user['id'])
 
@@ -1549,6 +1549,7 @@ async def get_preferences(user_id: int = Depends(get_current_user_id)):
             execute_query(
                 "INSERT INTO user_preferences (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING",
                 (user_id,),
+                fetch_all=False,
             )
             prefs = execute_query("SELECT * FROM user_preferences WHERE user_id = %s", (user_id,))
         if prefs:
@@ -1575,11 +1576,15 @@ async def update_preferences(data: UserPreferences, user_id: int = Depends(get_c
     if not update_data:
         return {"message": "No changes provided"}
 
-    # Ensure the row exists before trying to UPDATE
-    execute_query(
-        "INSERT INTO user_preferences (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING",
-        (user_id,),
-    )
+    # Ensure the row exists before trying to UPDATE (fetch_all=False: INSERT returns no rows)
+    try:
+        execute_query(
+            "INSERT INTO user_preferences (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING",
+            (user_id,),
+            fetch_all=False,
+        )
+    except Exception:
+        pass
 
     # Only update columns that actually exist in the table
     existing_cols = set()
@@ -1842,8 +1847,46 @@ def run_weekly_summaries():
 
 @app.on_event("startup")
 def start_scheduler():
+    _run_startup_migrations()
     scheduler.add_job(run_weekly_summaries, 'cron', day_of_week='mon', hour=8, minute=0, id='weekly_summaries', replace_existing=True)
     scheduler.start()
+
+
+def _run_startup_migrations():
+    """
+    Safe, idempotent schema migrations that run every time the backend starts.
+    Uses ADD COLUMN IF NOT EXISTS so they're a no-op when columns already exist.
+    This avoids breakage when the DB was created from an older schema version.
+    """
+    migrations = [
+        # user_preferences columns added after initial schema
+        "ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS notification_reminders BOOLEAN DEFAULT true",
+        "ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS notification_achievements BOOLEAN DEFAULT true",
+        "ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS profile_visibility VARCHAR(20) DEFAULT 'private'",
+        "ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS anonymous_analytics BOOLEAN DEFAULT false",
+        # coach_recommendations table — added for the Coach feature
+        """
+        CREATE TABLE IF NOT EXISTS coach_recommendations (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            recommendation_kind VARCHAR(50) NOT NULL,
+            target_id VARCHAR(50),
+            proposed_change TEXT,
+            outcome VARCHAR(30) DEFAULT 'pending',
+            coach_mode VARCHAR(20) NOT NULL,
+            generated_at TIMESTAMP NOT NULL,
+            resolved_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_coach_recs_user_id ON coach_recommendations(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_coach_recs_created_at ON coach_recommendations(created_at)",
+    ]
+    for sql in migrations:
+        try:
+            execute_query(sql.strip(), fetch_all=False)
+        except Exception as e:
+            print(f"[migration] skipped: {e}")
     
 @app.on_event("shutdown")
 def stop_scheduler():
