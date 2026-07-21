@@ -221,3 +221,9 @@ CREATE TABLE IF NOT EXISTS user_preferences (
     anonymous_analytics BOOLEAN DEFAULT false,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Idempotent migrations: add any columns that may be missing from earlier schema versions
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS notification_reminders BOOLEAN DEFAULT true;
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS notification_achievements BOOLEAN DEFAULT true;
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS profile_visibility VARCHAR(20) DEFAULT 'private';
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS anonymous_analytics BOOLEAN DEFAULT false;

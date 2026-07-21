@@ -1533,13 +1533,31 @@ async def get_today_sessions(user_id: int = Depends(get_current_user_id)):
 
 @app.get("/api/preferences")
 async def get_preferences(user_id: int = Depends(get_current_user_id)):
-    prefs = execute_query("SELECT * FROM user_preferences WHERE user_id = %s", (user_id,))
-    if not prefs:
-        # Fallback create if somehow missing
-        execute_query("INSERT INTO user_preferences (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user_id,))
+    _defaults = {
+        "user_id": user_id,
+        "dark_mode": True,
+        "desktop_notifications": True,
+        "weekly_summary_emails": True,
+        "notification_reminders": True,
+        "notification_achievements": True,
+        "profile_visibility": "private",
+        "anonymous_analytics": False,
+    }
+    try:
         prefs = execute_query("SELECT * FROM user_preferences WHERE user_id = %s", (user_id,))
-    
-    return prefs[0] if prefs else {}
+        if not prefs:
+            execute_query(
+                "INSERT INTO user_preferences (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING",
+                (user_id,),
+            )
+            prefs = execute_query("SELECT * FROM user_preferences WHERE user_id = %s", (user_id,))
+        if prefs:
+            result = dict(_defaults)
+            result.update({k: v for k, v in dict(prefs[0]).items() if v is not None})
+            return result
+    except Exception:
+        pass
+    return _defaults
 
 @app.patch("/api/preferences")
 async def update_preferences(data: UserPreferences, user_id: int = Depends(get_current_user_id)):

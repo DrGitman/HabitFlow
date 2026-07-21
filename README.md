@@ -163,8 +163,10 @@ Deploy as a Python web service. Set all variables from `backend/.env` in the Ren
 
 ## Screenshots
 
-> Add screenshots of: login page, dashboard, Coach page with a recommendation open showing the evidence panel, the Confirm & Apply bar.
+
+
+![alt text](image.png)
 
 ---
 
-Built by Esegel Narib — Build Week hackathon, 2026.
+Built by Orilio Naobeb — 2026.

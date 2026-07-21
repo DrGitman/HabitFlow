@@ -1,6 +1,6 @@
 """
 AI Gateway — the only module that knows the model name, SDK, or provider URL.
-Everything else in HabitFlow talks to CoachGateway, not to Anthropic directly.
+Everything else in HabitFlow talks to CoachGateway, not to Gemini directly.
 """
 from __future__ import annotations
 
@@ -18,8 +18,7 @@ from coach.prompts import get_system_prompt
 load_dotenv(Path(__file__).resolve().parents[1] / '.env')
 
 _API_KEY = os.getenv("AI_GATEWAY_API_KEY", "")
-_BASE_URL = os.getenv("AI_GATEWAY_BASE_URL", "https://api.anthropic.com")
-_MODEL = os.getenv("AI_MODEL", "claude-haiku-4-5-20251001")
+_MODEL = os.getenv("AI_MODEL", "gemini-1.5-flash")
 _TIMEOUT = 30  # seconds
 
 
@@ -29,40 +28,43 @@ class CoachGenerator(Protocol):
         ...
 
 
-class AnthropicGateway:
-    """Calls the Anthropic Messages API and returns a raw CoachDraft."""
+class GeminiGateway:
+    """Calls the Gemini REST API and returns a raw CoachDraft."""
 
     async def generate(self, *, mode: CoachMode, context: CoachContext) -> CoachDraft:
         system_prompt = get_system_prompt(mode)
         user_message = json.dumps(context.model_dump(), indent=2)
 
-        headers = {
-            "x-api-key": _API_KEY,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        }
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{_MODEL}:generateContent?key={_API_KEY}"
+        )
 
         payload = {
-            "model": _MODEL,
-            "max_tokens": 2048,
-            "system": system_prompt,
-            "messages": [{"role": "user", "content": user_message}],
+            "system_instruction": {
+                "parts": [{"text": system_prompt}]
+            },
+            "contents": [
+                {"role": "user", "parts": [{"text": user_message}]}
+            ],
+            "generationConfig": {
+                "maxOutputTokens": 2048,
+                "responseMimeType": "application/json",
+            },
         }
 
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            response = await client.post(
-                f"{_BASE_URL}/v1/messages",
-                headers=headers,
-                json=payload,
-            )
+            response = await client.post(url, json=payload)
 
         if response.status_code != 200:
             raise RuntimeError(
                 f"AI Gateway returned {response.status_code}. "
-                "Check AI_GATEWAY_API_KEY and AI_GATEWAY_BASE_URL in .env"
+                "Check AI_GATEWAY_API_KEY in .env"
             )
 
-        raw_text = response.json()["content"][0]["text"]
+        raw_text = (
+            response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        )
 
         try:
             data = json.loads(raw_text)
@@ -78,55 +80,99 @@ class FallbackGateway:
     """
     Returns a deterministic seeded response.
     Used when AI_GATEWAY_API_KEY is not set (local dev / demo without live AI).
+    All IDs used here must reference real items in the context so the validator
+    does not reject them.
     """
 
     async def generate(self, *, mode: CoachMode, context: CoachContext) -> CoachDraft:
-        high_priority = next(
+        # Prefer a high-priority task; fall back to any task
+        candidate = next(
             (t for t in context.tasks if t.priority == "high"), None
-        )
-        task_id = high_priority.id if high_priority else "task_demo"
-        task_title = high_priority.title if high_priority else "Top priority task"
+        ) or (context.tasks[0] if context.tasks else None)
 
+        warnings = ["AI Gateway is not configured. Showing a seeded demo response."]
+
+        if candidate:
+            return CoachDraft(
+                type=mode,
+                summary={
+                    "headline": f"Focus on {candidate.title} and protect one habit today.",
+                    "detail": (
+                        f"You have {context.available_minutes} minutes available. "
+                        "One focused block now will make the rest of the day easier."
+                    ),
+                },
+                recommendations=[
+                    {
+                        "id": "rec_1",
+                        "kind": "schedule_task",
+                        "title": candidate.title,
+                        "reason": "This is your highest priority open task today.",
+                        "evidence": [
+                            {
+                                "type": "task_high_priority",
+                                "source_id": candidate.id,
+                                "detail": "Marked high priority; estimated 60 minutes.",
+                            },
+                            {
+                                "type": "available_capacity",
+                                "source_id": None,
+                                "detail": f"{context.available_minutes} minutes available today.",
+                            },
+                        ],
+                        "confidence": 0.85,
+                        "proposed_action": {
+                            "type": "create_calendar_block",
+                            "task_id": candidate.id,
+                            "habit_id": None,
+                            "start": f"{context.date}T10:00:00",
+                            "end": f"{context.date}T11:00:00",
+                            "new_priority": None,
+                        },
+                        "requires_confirmation": True,
+                    }
+                ],
+                warnings=warnings,
+                evidence=[],
+                actions=[],
+            )
+
+        # No tasks at all — return a reflect recommendation (no task_id required)
         return CoachDraft(
             type=mode,
             summary={
-                "headline": f"Focus on {task_title} and protect one habit today.",
+                "headline": "Take a moment to plan your day.",
                 "detail": (
-                    f"You have {context.available_minutes} minutes available. "
-                    "One focused block now will make the rest of the day easier."
+                    "You have no open tasks right now. Add tasks and habits "
+                    "to get personalised coaching suggestions."
                 ),
             },
             recommendations=[
                 {
                     "id": "rec_1",
-                    "kind": "schedule_task",
-                    "title": task_title,
-                    "reason": "This is your highest priority open task today.",
+                    "kind": "reflect",
+                    "title": "Plan your day",
+                    "reason": "No open tasks found. Use this time to set up your schedule.",
                     "evidence": [
-                        {
-                            "type": "task_high_priority",
-                            "source_id": task_id,
-                            "detail": f"Marked high priority; estimated 60 minutes.",
-                        },
                         {
                             "type": "available_capacity",
                             "source_id": None,
                             "detail": f"{context.available_minutes} minutes available today.",
-                        },
+                        }
                     ],
-                    "confidence": 0.85,
+                    "confidence": 0.70,
                     "proposed_action": {
-                        "type": "create_calendar_block",
-                        "task_id": task_id,
+                        "type": "none",
+                        "task_id": None,
                         "habit_id": None,
-                        "start": f"{context.date}T10:00:00",
-                        "end": f"{context.date}T11:00:00",
+                        "start": None,
+                        "end": None,
                         "new_priority": None,
                     },
-                    "requires_confirmation": True,
+                    "requires_confirmation": False,
                 }
             ],
-            warnings=["AI Gateway is not configured. Showing a seeded demo response."],
+            warnings=warnings,
             evidence=[],
             actions=[],
         )
@@ -135,5 +181,5 @@ class FallbackGateway:
 def get_gateway() -> CoachGenerator:
     """Return the live gateway if API key is set, otherwise the fallback."""
     if _API_KEY:
-        return AnthropicGateway()
+        return GeminiGateway()
     return FallbackGateway()
