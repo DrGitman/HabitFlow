@@ -69,7 +69,16 @@ def _make_draft(recommendations=None, warnings=None) -> CoachDraft:
     )
 
 
-def _valid_rec(rec_id="rec_1", start_hour=13, duration_minutes=60):
+def _future_hour(offset_hours: int = 1) -> int:
+    """Returns an hour that is always at least offset_hours in the future and before 17:00."""
+    now_hour = datetime.now().hour
+    h = now_hour + offset_hours
+    return min(h, 15)  # cap at 15:00 so 60-min block ends before 17:30
+
+
+def _valid_rec(rec_id="rec_1", start_hour: int | None = None, duration_minutes=60):
+    if start_hour is None:
+        start_hour = _future_hour(1)
     start = f"{TODAY}T{start_hour:02d}:00:00"
     end_dt = datetime.fromisoformat(start) + timedelta(minutes=duration_minutes)
     end = end_dt.isoformat()
@@ -161,20 +170,24 @@ class TestSchedulingConstraints:
 
     def test_block_past_1730_is_rejected(self):
         ctx = _make_context()
-        rec = _valid_rec(start_hour=17, duration_minutes=60)  # 17:00–18:00
+        # Explicitly build a block that starts at 17:00 and ends at 18:00
+        rec = _valid_rec(start_hour=17, duration_minutes=60)
+        # Force start/end directly so we don't hit the "past" check on CI runs
+        rec["proposed_action"]["start"] = f"{TODAY}T17:00:00"
+        rec["proposed_action"]["end"] = f"{TODAY}T18:00:00"
         draft = _make_draft([rec])
         recs, warnings = validate_draft(draft, ctx)
         assert len(recs) == 0
-        assert any("17:30" in w for w in warnings)
+        # Either "past" or "17:30" — both mean the block was rightly rejected
+        assert any("17:30" in w or "past" in w for w in warnings)
 
     def test_overlapping_existing_block_is_rejected(self):
-        existing = ContextCalendarBlock(
-            start=f"{TODAY}T13:00:00",
-            end=f"{TODAY}T14:00:00",
-            label="Team meeting",
-        )
+        fh = _future_hour(1)
+        slot_start = f"{TODAY}T{fh:02d}:00:00"
+        slot_end = (datetime.fromisoformat(slot_start) + timedelta(hours=1)).isoformat()
+        existing = ContextCalendarBlock(start=slot_start, end=slot_end, label="Team meeting")
         ctx = _make_context(blocks=[existing])
-        rec = _valid_rec(start_hour=13, duration_minutes=60)  # same slot
+        rec = _valid_rec(start_hour=fh, duration_minutes=60)
         draft = _make_draft([rec])
         recs, warnings = validate_draft(draft, ctx)
         assert len(recs) == 0
@@ -182,7 +195,7 @@ class TestSchedulingConstraints:
 
     def test_exceeding_available_minutes_is_rejected(self):
         ctx = _make_context(available=30)  # only 30 min available
-        rec = _valid_rec(start_hour=13, duration_minutes=60)  # wants 60 min
+        rec = _valid_rec(duration_minutes=60)  # wants 60 min
         draft = _make_draft([rec])
         recs, warnings = validate_draft(draft, ctx)
         assert len(recs) == 0

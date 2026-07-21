@@ -73,58 +73,64 @@ def validate_draft(draft: CoachDraft, context: CoachContext) -> Tuple[List[Recom
 
         reject_reason = None
 
+        def _reject(msg: str):
+            nonlocal reject_reason
+            if reject_reason is None:
+                reject_reason = msg
+
         # --- Kind allowlist ---
         if kind not in ALLOWED_KINDS:
-            reject_reason = f"{rec_id}: invalid kind '{kind}'"
+            _reject(f"{rec_id}: invalid kind '{kind}'")
 
         # --- Action type allowlist ---
         action_type = action_raw.get("type", "none") if isinstance(action_raw, dict) else "none"
         if action_type not in ALLOWED_ACTION_TYPES:
-            reject_reason = f"{rec_id}: invalid action type '{action_type}'"
+            _reject(f"{rec_id}: invalid action type '{action_type}'")
 
         # --- Require reason, evidence, confidence for actionable recs ---
-        if kind != "reflect":
+        if kind != "reflect" and reject_reason is None:
             if not reason:
-                reject_reason = f"{rec_id}: missing reason"
+                _reject(f"{rec_id}: missing reason")
             if not evidence_raw:
-                reject_reason = f"{rec_id}: missing evidence"
+                _reject(f"{rec_id}: missing evidence")
             if confidence == 0.0:
-                reject_reason = f"{rec_id}: confidence is 0"
+                _reject(f"{rec_id}: confidence is 0")
 
         # --- Task/habit ID references must exist in context ---
         ref_task_id = action_raw.get("task_id") if isinstance(action_raw, dict) else None
         ref_habit_id = action_raw.get("habit_id") if isinstance(action_raw, dict) else None
-        if ref_task_id and ref_task_id not in valid_ids:
-            reject_reason = f"{rec_id}: references unknown task '{ref_task_id}'"
-        if ref_habit_id and ref_habit_id not in valid_ids:
-            reject_reason = f"{rec_id}: references unknown habit '{ref_habit_id}'"
+        if reject_reason is None:
+            if ref_task_id and ref_task_id not in valid_ids:
+                _reject(f"{rec_id}: references unknown task '{ref_task_id}'")
+            if ref_habit_id and ref_habit_id not in valid_ids:
+                _reject(f"{rec_id}: references unknown habit '{ref_habit_id}'")
 
-        # --- Calendar block validation ---
+        # --- Calendar block validation (only if no earlier rejection) ---
         start_str = action_raw.get("start") if isinstance(action_raw, dict) else None
         end_str = action_raw.get("end") if isinstance(action_raw, dict) else None
 
-        if action_type == "create_calendar_block" and start_str and end_str:
+        if reject_reason is None and action_type == "create_calendar_block" and start_str and end_str:
             try:
                 start_dt = _parse_dt(start_str)
                 end_dt = _parse_dt(end_str)
             except ValueError:
-                reject_reason = f"{rec_id}: unparseable start/end datetime"
+                _reject(f"{rec_id}: unparseable start/end datetime")
             else:
                 if end_dt <= start_dt:
-                    reject_reason = f"{rec_id}: end is not after start"
+                    _reject(f"{rec_id}: end is not after start")
                 elif start_dt < now:
-                    reject_reason = f"{rec_id}: start is in the past"
+                    _reject(f"{rec_id}: start is in the past")
                 elif start_dt.date().isoformat() != target_date:
-                    reject_reason = f"{rec_id}: block is not on the target date"
+                    _reject(f"{rec_id}: block is not on the target date")
                 elif end_dt > _parse_dt(max_end_str):
-                    reject_reason = f"{rec_id}: block extends past 17:30"
+                    _reject(f"{rec_id}: block extends past 17:30")
                 elif _overlaps(start_dt, end_dt, existing_blocks):
-                    reject_reason = f"{rec_id}: overlaps an existing calendar block"
+                    _reject(f"{rec_id}: overlaps an existing calendar block")
                 else:
                     block_minutes = int((end_dt - start_dt).total_seconds() / 60)
                     total_scheduled += block_minutes
                     if total_scheduled > context.available_minutes:
-                        reject_reason = (
+                        _reject(
                             f"{rec_id}: would exceed available minutes "
                             f"({total_scheduled} > {context.available_minutes})"
                         )
