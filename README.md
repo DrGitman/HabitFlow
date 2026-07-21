@@ -163,9 +163,42 @@ Deploy as a Python web service. Set all variables from `backend/.env` in the Ren
 
 ## Screenshots
 
+![Sign Up Page](image-1.png)
 
+Sign Up Page
 
-![alt text](image.png)
+![Login Page](image-2.png)
+
+Log in Page
+
+![Dashboard](image.png)
+
+Dashboard Page
+
+![alt text](image-4.png)
+
+Actions Page: Tasks
+
+![alt text](image-5.png)
+
+Actions Page: Goals
+
+![alt text](image-6.png)
+
+Actions Page: Habits
+
+![alt text](image-7.png)
+
+Analytics Page
+
+![alt text](image-8.png)
+
+Calender Page
+
+![alt text](image-9.png)
+
+Coach Page
+
 
 ---
 

@@ -19,9 +19,9 @@ The JSON must match this exact structure:
       "id": "rec_<n>",
       "kind": "<kind>",
       "title": "<short title>",
-      "reason": "<why this matters today>",
+      "reason": "<why this matters today — specific, not generic>",
       "evidence": [
-        { "type": "<evidence_type>", "source_id": "<task_N or habit_N or null>", "detail": "<concrete detail>" }
+        { "type": "<evidence_type>", "source_id": "<task_N or habit_N or null>", "detail": "<concrete detail from user data>" }
       ],
       "confidence": <0.0-1.0>,
       "proposed_action": {
@@ -40,21 +40,31 @@ The JSON must match this exact structure:
   "actions": []
 }
 
-Rules:
+Hard rules (non-negotiable):
 - Cap recommendations at 3 primary + 1 optional recovery action.
 - Reference tasks and habits by their stable IDs (task_N, habit_N) — never by title alone.
-- Every actionable recommendation (kind != "reflect") must have at least one evidence item.
+- Every actionable recommendation (kind != "reflect") must include at least one evidence item tied to real user data.
 - Every actionable recommendation must set requires_confirmation to true.
 - Do not schedule past 17:30. Do not schedule in the past.
 - Leave at least 15 minutes between focus blocks.
-- Do not schedule more time than available_minutes.
-- kind must be one of: schedule_task, defer_task, reduce_scope, complete_habit, preserve_rest, reflect.
-- proposed_action.type must be one of: create_calendar_block, defer_task, update_task_priority, suggest_habit, none.
-- If you have low confidence or insufficient data, use kind=reflect and action type=none.
-- Show confidence as a decimal. Internal only — the UI will convert to High/Medium/Low.
-- Adapt to recommendation_history: if a pattern appears ignored or rejected twice, suggest a different approach.
-  Frame adaptation as tentative — e.g. "Earlier exercise times have not been selected recently."
-  Do not claim to know why the user acted a certain way.
+- Do not exceed available_minutes when scheduling.
+- kind must be exactly one of: schedule_task, defer_task, reduce_scope, complete_habit, preserve_rest, reflect.
+- proposed_action.type must be exactly one of: create_calendar_block, defer_task, update_task_priority, suggest_habit, none.
+- If confidence is below 0.5 or evidence is weak, use kind=reflect and action type=none rather than guessing.
+
+Adaptive learning rules (use recommendation_history):
+- If accepted_patterns shows a kind with acceptance_rate >= 0.7, prioritise that kind of suggestion.
+- If rejected_patterns shows the same (kind, target_id) pair with rejection_count >= 2, do NOT suggest that same action again.
+  Instead, suggest a different approach for that task or habit, or leave it out entirely.
+- When adapting due to history, reference the pattern explicitly in the reason field using tentative language:
+  e.g. "You haven't selected morning exercise blocks recently — trying an afternoon slot instead."
+- Never assume intent. Use "may be", "appears to", "haven't selected" — not "you don't like" or "you failed".
+
+Personalisation rules:
+- Use streak data to identify which habits are at risk today and which are healthy.
+- Use task_completion_rate_7d and habit_completion_rate_7d to calibrate how ambitious the plan is.
+- If completion rates are below 0.4, reduce scope — do not add more items.
+- Reference actual numbers from user data in evidence.detail (e.g. "5-day streak", "3 overdue items", "62 minutes available").
 """
 
 _DAILY_SYSTEM = """

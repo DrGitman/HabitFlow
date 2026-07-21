@@ -250,6 +250,7 @@ export default function Coach() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState(false);
+  const [cooldown, setCooldown] = useState(0); // seconds remaining before next generate
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -259,7 +260,18 @@ export default function Coach() {
     });
   };
 
+  const startCooldown = (seconds: number) => {
+    setCooldown(seconds);
+    const tick = setInterval(() => {
+      setCooldown(prev => {
+        if (prev <= 1) { clearInterval(tick); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
   const generate = async () => {
+    if (cooldown > 0) return;
     setLoading(true);
     setResponse(null);
     setSelected(new Set());
@@ -273,8 +285,15 @@ export default function Coach() {
         }),
       });
       setResponse(data);
+      startCooldown(90); // 90s cooldown after success — well within free tier limits
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Coach unavailable. Try again.');
+      const msg = err instanceof Error ? err.message : 'Coach unavailable. Try again.';
+      if (msg.includes('429') || msg.includes('rate limit')) {
+        toast.error('Rate limit hit. Waiting 60 seconds before you can try again.');
+        startCooldown(60);
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -337,12 +356,14 @@ export default function Coach() {
       {/* Generate button */}
       <button
         onClick={generate}
-        disabled={loading}
+        disabled={loading || cooldown > 0}
         className="w-full flex items-center justify-center gap-2 py-4 rounded-[14px] bg-gradient-to-r from-[#8e8cf7] to-[#6d69f0] hover:from-[#7c79ff] hover:to-[#524eff] text-white font-black uppercase tracking-widest text-[12px] transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_8px_24px_rgba(124,121,255,0.15)] mb-8"
       >
         {loading
           ? <><Loader2 className="w-4 h-4 animate-spin" /> Thinking...</>
-          : <><Brain className="w-4 h-4" /> Get {mode === 'daily' ? "Today's Focus" : mode === 'recovery' ? 'Recovery Plan' : 'Weekly Review'}</>
+          : cooldown > 0
+            ? <><Clock className="w-4 h-4" /> Ready in {cooldown}s</>
+            : <><Brain className="w-4 h-4" /> Get {mode === 'daily' ? "Today's Focus" : mode === 'recovery' ? 'Recovery Plan' : 'Weekly Review'}</>
         }
       </button>
 

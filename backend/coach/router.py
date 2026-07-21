@@ -26,8 +26,11 @@ async def generate_coach_plan(
         return await run_coach(user_id, body)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except RuntimeError:
-        raise HTTPException(status_code=502, detail="AI service unavailable. Please try again later.")
+    except RuntimeError as exc:
+        # Log full error to backend terminal
+        import logging
+        logging.getLogger(__name__).error("Coach RuntimeError: %s", exc)
+        raise HTTPException(status_code=502, detail=f"AI service unavailable: {exc}")
 
 
 class ApplyRequest(BaseModel):
