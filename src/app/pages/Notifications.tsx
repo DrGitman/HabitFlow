@@ -53,6 +53,15 @@ export default function Notifications() {
     }
   };
 
+  const handleMarkAllRead = async () => {
+    try {
+      await api.markAllNotificationsAsRead();
+      setNotifications(current => current.map(notification => ({ ...notification, is_read: true })));
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+
   const getIcon = (type: string) => {
     switch (type) {
       case 'reminder': return <Calendar className="w-5 h-5 text-[#58a6ff]" />;
@@ -72,7 +81,7 @@ export default function Notifications() {
           <p className="text-[#8b949e] text-[14px] mt-1 font-medium">System alerts and achievement milestones.</p>
         </div>
         <button
-          onClick={() => notifications.forEach(n => !n.is_read && handleMarkRead(n.id))}
+          onClick={handleMarkAllRead}
           className="text-[12px] font-black text-[#58a6ff] hover:text-[#58a6ff]/80 transition-colors bg-[#58a6ff]/10 px-4 py-2 rounded-full border border-[#58a6ff]/20"
         >
           MARK ALL AS READ

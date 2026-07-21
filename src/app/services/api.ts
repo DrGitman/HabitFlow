@@ -295,6 +295,12 @@ class ApiService {
     });
   }
 
+  async markAllNotificationsAsRead() {
+    return this.request('/api/notifications/mark-all-read', {
+      method: 'POST',
+    });
+  }
+
   async deleteNotification(id: number) {
     return this.request(`/api/notifications/${id}`, {
       method: 'DELETE',

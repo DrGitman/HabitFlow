@@ -61,9 +61,7 @@ export default function Goals({ forceNew, onFormOpened, highlightId, onHighlight
   useEffect(() => {
     if (goals.length > 0) {
       calculateProgress(goals, tasks, habits);
-      // Check if any goals should be auto-completed or reverted
       checkAndAutoCompleteGoals(goals, tasks, habits);
-      checkAndRevertGoals(goals, tasks, habits);
     }
   }, [goals, tasks, habits]);
 
@@ -162,6 +160,20 @@ export default function Goals({ forceNew, onFormOpened, highlightId, onHighlight
       deadline: goal.deadline ? goal.deadline.split('T')[0] : '',
     });
     setShowForm(true);
+  };
+
+  const handleComplete = async (goal: Goal) => {
+    try {
+      await api.updateGoal(goal.id, {
+        is_completed: !goal.is_completed,
+        completed_at: !goal.is_completed ? new Date().toISOString() : null,
+      });
+      toast.success(goal.is_completed ? 'Goal moved back to active' : 'Goal completed — great work!');
+      fetchGoals();
+    } catch (e) {
+      console.error('Error updating goal completion:', e);
+      toast.error('Unable to update this goal. Please try again.');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -389,6 +401,7 @@ export default function Goals({ forceNew, onFormOpened, highlightId, onHighlight
       <div className="space-y-4">
         {metrics.activeGoals.map(goal => {
           const daysLeft = getDaysLeft(goal.deadline);
+          const isOverdue = goal.deadline ? new Date(goal.deadline).getTime() < new Date().setHours(0, 0, 0, 0) : false;
           const isCritical = daysLeft !== null && daysLeft <= 5;
           const priorityColors: Record<string, { bg: string; text: string }> = {
             low: { bg: '#4b5563', text: '#a0aec0' },
@@ -397,6 +410,7 @@ export default function Goals({ forceNew, onFormOpened, highlightId, onHighlight
           };
           const priority = goal.priority || 'medium';
           const pc = priorityColors[priority];
+          const linkedHabits = habits.filter(habit => habit.goal_ids?.includes(goal.id));
 
           return (
             <div
@@ -418,6 +432,14 @@ export default function Goals({ forceNew, onFormOpened, highlightId, onHighlight
                 {/* Actions on hover */}
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                   <button
+                    onClick={() => handleComplete(goal)}
+                    className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#22c55e] transition-all"
+                    title="Mark goal complete"
+                    aria-label={`Mark ${goal.title} complete`}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => handleEdit(goal)}
                     className="p-1.5 hover:bg-[#222a3d] rounded-[6px] text-[#8b949e] hover:text-[#7c79ff] transition-all"
                     title="Edit goal"
@@ -433,6 +455,18 @@ export default function Goals({ forceNew, onFormOpened, highlightId, onHighlight
                   </button>
                 </div>
               </div>
+
+              {linkedHabits.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 pt-3">
+                  <Link2 className="w-3.5 h-3.5 text-[#8b949e]" aria-hidden="true" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#8b949e]">Linked habits</span>
+                  {linkedHabits.map(habit => (
+                    <span key={habit.id} className="text-[11px] font-semibold text-[#c2c1ff] bg-[#7c79ff]/10 border border-[#7c79ff]/20 px-2 py-1 rounded-full">
+                      {habit.name}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {/* Progress bar section - always show */}
               <div className="pt-4 space-y-1.5">
@@ -461,7 +495,12 @@ export default function Goals({ forceNew, onFormOpened, highlightId, onHighlight
               {/* Deadline section */}
               {daysLeft !== null && (
                 <div className="flex items-center justify-start gap-2 pt-3 border-t border-[#ffffff08] mt-3">
-                  {isCritical ? (
+                  {isOverdue ? (
+                    <>
+                      <AlertTriangle className="w-4 h-4 text-[#f85149]" />
+                      <span className="text-[12px] text-[#f85149] font-semibold">Overdue</span>
+                    </>
+                  ) : isCritical ? (
                     <>
                       <AlertTriangle className="w-4 h-4 text-[#fb923c]" />
                       <span className="text-[12px] text-[#fb923c] font-semibold">Due in {daysLeft} day{daysLeft !== 1 ? 's' : ''}</span>

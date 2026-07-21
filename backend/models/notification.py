@@ -40,6 +40,12 @@ class Notification:
         return execute_query(query, (notification_id, user_id), fetch_one=True)
 
     @staticmethod
+    def mark_all_as_read(user_id):
+        """Mark every visible notification for a user as read in one operation."""
+        query = "UPDATE notifications SET is_read = true WHERE user_id = %s AND is_read = false"
+        return execute_query(query, (user_id,), fetch_all=False)
+
+    @staticmethod
     def delete(notification_id, user_id):
         """Delete a notification"""
         query = "DELETE FROM notifications WHERE id = %s AND user_id = %s"

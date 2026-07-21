@@ -5,7 +5,7 @@ import {
   ResponsiveContainer,
   AreaChart, Area, Legend
 } from 'recharts';
-import { Chart as ChartJS, LineElement, PointElement, Tooltip as ChartJSTooltip, Legend as ChartJSLegend, RadialLinearScale, Filler } from 'chart.js';
+import { Chart as ChartJS, LineElement, PointElement, Tooltip as ChartJSTooltip, Legend as ChartJSLegend, RadialLinearScale, RadarController, Filler } from 'chart.js';
 import { Chart as ChartComponent } from 'react-chartjs-2';
 import { TrendingUp, TrendingDown, Award, Target, Zap, Activity, PieChart, Info } from 'lucide-react';
 
@@ -16,6 +16,7 @@ ChartJS.register(
   ChartJSTooltip,
   ChartJSLegend,
   RadialLinearScale,
+  RadarController,
   Filler
 );
 

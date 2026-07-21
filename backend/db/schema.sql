@@ -32,23 +32,7 @@ CREATE TABLE IF NOT EXISTS habits (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tasks table
-CREATE TABLE IF NOT EXISTS tasks (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    category VARCHAR(100),
-    priority VARCHAR(20) DEFAULT 'medium', -- low, medium, high
-    due_date DATE,
-    is_completed BOOLEAN DEFAULT false,
-    completed_at TIMESTAMP,
-    goal_id INTEGER REFERENCES goals(id) ON DELETE SET NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Goals table
+-- Goals table (must be defined before tasks, which references it)
 CREATE TABLE IF NOT EXISTS goals (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -60,6 +44,22 @@ CREATE TABLE IF NOT EXISTS goals (
     current_value FLOAT DEFAULT 0,
     target_value FLOAT DEFAULT 100,
     completed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tasks table (defined after goals because it references goals)
+CREATE TABLE IF NOT EXISTS tasks (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(100),
+    priority VARCHAR(20) DEFAULT 'medium', -- low, medium, high
+    due_date DATE,
+    is_completed BOOLEAN DEFAULT false,
+    completed_at TIMESTAMP,
+    goal_id INTEGER REFERENCES goals(id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

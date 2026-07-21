@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException, Depends, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Any
 from datetime import datetime, timedelta, date
@@ -38,6 +39,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global exception handler — ensures CORS headers are always present even on crashes
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {str(exc)}"}
+    )
 
 # JWT Secret Key
 JWT_SECRET = os.getenv('JWT_SECRET', 'your-secret-key-here')
@@ -765,6 +774,11 @@ async def mark_notification_read(notification_id: int, user_id: int = Depends(ge
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
     return notification
+
+@app.post("/api/notifications/mark-all-read")
+async def mark_all_notifications_read(user_id: int = Depends(get_current_user_id)):
+    Notification.mark_all_as_read(user_id)
+    return {'message': 'All notifications marked as read'}
 
 @app.delete("/api/notifications/{notification_id}")
 async def delete_notification(notification_id: int, user_id: int = Depends(get_current_user_id)):

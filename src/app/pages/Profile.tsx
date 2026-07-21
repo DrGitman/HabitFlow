@@ -313,9 +313,9 @@ export default function Profile() {
             {/* Info Section */}
             <div className="flex-1 text-center md:text-left space-y-6">
               <div>
-                <p className="text-[#7c79ff] text-[10px] font-black uppercase tracking-[0.2em] mb-1">
-                  {prefs?.privacy_show_rank === false ? 'Private' : (profile?.rank || 'Beginner')}
-                </p>
+                <span className="inline-flex items-center rounded-full border border-[#7c79ff]/30 bg-[#7c79ff]/10 px-2.5 py-1 text-[#a5b4fc] text-[10px] font-black uppercase tracking-[0.16em] mb-2">
+                  {prefs?.privacy_show_rank === false ? 'Rank private' : (profile?.rank || 'Beginner')}
+                </span>
                 <h1 className="text-[#ffffff] text-[32px] font-black tracking-tight leading-none">{profile?.full_name || 'System User'}</h1>
                 <p className="text-[#8b949e] text-[13px] mt-1 font-medium">{profile?.email}</p>
               </div>
