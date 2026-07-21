@@ -85,6 +85,20 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ---
 
+## OpenAI Build Week — How I used Codex
+
+I used Codex as a technical development partner during OpenAI Build Week to meaningfully extend and refine an existing project, HabitFlow, rather than simply generating code.
+
+Codex helped me analyze tester feedback, identify high-impact bugs, investigate frontend and backend issues, reason through architecture decisions, and prioritize improvements. It accelerated debugging by tracing problems across my React frontend and FastAPI backend, explaining root causes, suggesting implementation strategies, and helping verify production builds.
+
+Throughout development I remained responsible for reviewing every suggestion, integrating changes into my own architecture, testing functionality, and deciding which recommendations aligned with my product vision.
+
+HabitFlow originally began as a simple Excel-based habit tracker. During Build Week I used Codex together with GPT-5.6 to evolve it into a more intelligent productivity platform capable of adaptive planning, recovery workflows, and explainable productivity coaching.
+
+Overall, Codex significantly reduced the time spent investigating complex issues and allowed me to focus more on product design, usability, and implementation quality.
+
+---
+
 ## How AI was used in this project
 
 This was built for a hackathon using two AI tools in different roles.
