@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router';
-import { Home, Zap, BarChart3, LogOut, Calendar, Settings, Plus, Target, CheckSquare, Activity } from 'lucide-react';
+import { Home, Zap, BarChart3, LogOut, Calendar, Settings, Plus, Target, CheckSquare, Activity, Brain } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useState } from 'react';
 
@@ -12,6 +12,7 @@ export default function Navigation() {
   const navItems = [
     { name: 'Dashboard', path: '/', icon: Home },
     { name: 'Actions',   path: '/actions', icon: Zap },
+    { name: 'Coach',     path: '/coach', icon: Brain },
     { name: 'Analytics', path: '/analytics', icon: BarChart3 },
     { name: 'Calendar',  path: '/calendar', icon: Calendar },
     { name: 'Settings',  path: '/settings', icon: Settings },

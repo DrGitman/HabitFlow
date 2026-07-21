@@ -44,6 +44,33 @@ def _task_row_to_context(row: dict) -> ContextTask:
 # Public assembler
 # ---------------------------------------------------------------------------
 
+def assemble_weekly_constraints(user_id: int, target_date: str) -> List[str]:
+    """Extra constraints injected for weekly review mode."""
+    target = date.fromisoformat(target_date)
+    week_start = (target - timedelta(days=6)).isoformat()
+
+    completed_habits = execute_query(
+        """
+        SELECT h.name, COUNT(hc.id) AS days_completed
+        FROM habits h
+        LEFT JOIN habit_completions hc
+            ON hc.habit_id = h.id AND hc.completion_date BETWEEN %s AND %s
+        WHERE h.user_id = %s AND h.is_active = true
+        GROUP BY h.name
+        ORDER BY days_completed DESC
+        LIMIT 5
+        """,
+        (week_start, target_date, user_id),
+    ) or []
+
+    lines = []
+    for row in completed_habits:
+        lines.append(
+            f"Habit '{row['name']}' was completed {row['days_completed']}/7 days this week."
+        )
+    return lines
+
+
 def assemble_context(user_id: int, target_date: str) -> CoachContext:
     """Build the compact context the model receives. Never returns raw DB rows."""
 

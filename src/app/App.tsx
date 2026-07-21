@@ -9,6 +9,7 @@ import Calendar from './pages/Calendar';
 import Notifications from './pages/Notifications';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
+import Coach from './pages/Coach';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import { Toaster } from './components/ui/sonner';
@@ -81,6 +82,14 @@ function AppRoutes() {
       {/* Legacy redirects */}
       <Route path="/tasks"  element={<Navigate to="/actions" replace />} />
       <Route path="/habits" element={<Navigate to="/actions" replace />} />
+      <Route
+        path="/coach"
+        element={
+          <ProtectedRoute>
+            <Coach />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/analytics"
         element={
