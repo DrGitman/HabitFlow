@@ -22,6 +22,7 @@ from models.focus_session import FocusSession
 from models.scheduled_item import ScheduledItem
 from models.notification import Notification
 from db.connection import execute_query
+from coach.router import router as coach_router
 
 load_dotenv(Path(__file__).resolve().parent / '.env')
 
@@ -47,6 +48,9 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": f"Internal server error: {str(exc)}"}
     )
+
+# Coach router
+app.include_router(coach_router)
 
 # JWT Secret Key
 JWT_SECRET = os.getenv('JWT_SECRET', 'your-secret-key-here')

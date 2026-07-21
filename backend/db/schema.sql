@@ -192,6 +192,23 @@ CREATE TABLE IF NOT EXISTS goal_habits (
 CREATE INDEX IF NOT EXISTS idx_goal_habits_goal_id ON goal_habits(goal_id);
 CREATE INDEX IF NOT EXISTS idx_goal_habits_habit_id ON goal_habits(habit_id);
 
+-- Coach recommendations outcome tracking (for adaptive coaching history)
+CREATE TABLE IF NOT EXISTS coach_recommendations (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    recommendation_kind VARCHAR(50) NOT NULL,
+    target_id VARCHAR(50),                        -- e.g. task_42 or habit_12
+    proposed_change TEXT,
+    outcome VARCHAR(30) DEFAULT 'pending',        -- accepted | edited_then_accepted | rejected | ignored | completed | not_completed
+    coach_mode VARCHAR(20) NOT NULL,              -- daily | recovery | weekly
+    generated_at TIMESTAMP NOT NULL,
+    resolved_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_coach_recs_user_id ON coach_recommendations(user_id);
+CREATE INDEX IF NOT EXISTS idx_coach_recs_created_at ON coach_recommendations(created_at);
+
 -- User Preferences table
 CREATE TABLE IF NOT EXISTS user_preferences (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
