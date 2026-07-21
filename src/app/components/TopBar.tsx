@@ -163,7 +163,7 @@ export default function TopBar() {
             <p className="text-[#ffffff] text-[13px] font-black leading-tight group-hover:text-[#7c79ff] transition-colors uppercase tracking-tight">
               {user?.full_name || 'System User'}
             </p>
-            <p className="text-[#8b949e] text-[9px] leading-tight font-black uppercase tracking-[0.15em] opacity-40 mt-0.5">{user?.rank || 'Habit Architect'}</p>
+            <p className="text-[#8b949e] text-[9px] leading-tight font-black uppercase tracking-[0.15em] opacity-40 mt-0.5">{user?.rank || 'Getting Started'}</p>
           </div>
           <div className="w-10 h-10 rounded-full bg-[#11141d] border border-[#ffffff0a] flex items-center justify-center text-[#7c79ff] group-hover:border-[#7c79ff] group-hover:shadow-[0_0_15px_rgba(124,121,255,0.2)] transition-all overflow-hidden relative">
             {user?.avatar_url ? (

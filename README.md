@@ -1,364 +1,170 @@
-# HabitFlow - Production-Ready Habit Tracker Application
+# HabitFlow
 
-A complete, full-stack habit tracking and productivity application with real-time analytics, task management, and goal tracking.
+HabitFlow helps you build better habits, finish your tasks, and hit your goals — with an AI coach that tells you what to focus on today and why.
 
-## 🚀 Features
-
-### Frontend (React + TypeScript + Tailwind CSS)
-- **Dashboard** - Real-time analytics with charts (Recharts)
-- **Task Management** - Create, edit, complete, and delete tasks
-- **Habit Tracking** - Build and track daily habits with streak calculations
-- **Analytics** - 30-day trends, performance radar charts, and completion rates
-- **Authentication** - JWT-based login and signup
-- **Responsive Design** - Dark theme with beautiful gradients
-
-### Backend (Python Flask + PostgreSQL)
-- **RESTful API** - Complete API endpoints for all features
-- **Database Schema** - PostgreSQL with proper relationships and indexes
-- **Authentication** - JWT tokens with bcrypt password hashing
-- **Business Logic** - Streak calculations, analytics, and data aggregations
-- **User Isolation** - Each user sees only their own data
-
-## 📁 Project Structure
-
-```
-.
-├── backend/                    # Python Flask Backend
-│   ├── api/                   # API route handlers
-│   ├── db/                    # Database connection and schema
-│   │   ├── connection.py      # PostgreSQL connection (replace POSTGRES_DB_LINK)
-│   │   └── schema.sql         # Database schema
-│   ├── models/                # Data models
-│   │   ├── user.py
-│   │   ├── habit.py
-│   │   ├── task.py
-│   │   └── goal.py
-│   ├── app.py                 # Flask application
-│   ├── requirements.txt       # Python dependencies
-│   └── .env.example          # Environment variables template
-│
-├── src/                       # React Frontend
-│   ├── app/
-│   │   ├── components/       # React components
-│   │   │   └── Navigation.tsx
-│   │   ├── pages/            # Page components
-│   │   │   ├── Dashboard.tsx
-│   │   │   ├── Tasks.tsx
-│   │   │   ├── Habits.tsx
-│   │   │   ├── Analytics.tsx
-│   │   │   └── Login.tsx
-│   │   ├── context/          # React context
-│   │   │   └── AuthContext.tsx
-│   │   ├── services/         # API service layer
-│   │   │   └── api.ts
-│   │   └── App.tsx           # Main app component
-│   └── imports/              # Figma imported components
-│
-└── package.json              # Node dependencies
-```
-
-## 🛠️ Setup Instructions
-
-### 1. Database Setup
-
-#### Create PostgreSQL Database
-
-```bash
-# Using psql
-createdb habit_tracker
-
-# Or using PostgreSQL client
-psql -U postgres
-CREATE DATABASE habit_tracker;
-```
-
-#### Initialize Database Schema
-
-```bash
-cd backend
-psql -U postgres -d habit_tracker -f db/schema.sql
-```
-
-### 2. Backend Setup
-
-#### Install Python Dependencies
-
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-#### Configure Environment Variables
-
-```bash
-# Copy example env file
-cp .env.example .env
-
-# Edit .env and replace placeholders
-nano .env
-```
-
-**IMPORTANT:** Replace `POSTGRES_DB_LINK` in `.env` with your actual PostgreSQL connection string:
-
-```
-DATABASE_URL=postgresql://username:password@localhost:5432/habit_tracker
-JWT_SECRET=your-secret-key-here
-```
-
-#### Run Backend Server
-
-```bash
-python app.py
-```
-
-The backend will run on `http://localhost:5000`
-
-### 3. Frontend Setup
-
-#### Install Node Dependencies
-
-```bash
-pnpm install
-```
-
-#### Configure API URL
-
-Create a `.env` file in the root directory:
-
-```
-REACT_APP_API_URL=http://localhost:5000
-```
-
-#### Run Frontend Development Server
-
-The Vite dev server should already be running. If not, check your Make preview surface.
-
-### 4. Access Application
-
-1. Open the Make preview surface
-2. You'll see the login page
-3. Create a new account or login
-4. Start tracking your habits!
-
-## 🗄️ Database Schema
-
-### Tables
-
-- **users** - User accounts with authentication
-- **habits** - User habits with frequency and targets
-- **tasks** - Task management with priorities and due dates
-- **goals** - Goal tracking with progress
-- **habit_completions** - Daily habit completion records
-- **streaks** - Habit streak tracking
-- **notifications** - User notifications
-- **activity_log** - Activity tracking
-
-See `backend/db/schema.sql` for complete schema.
-
-## 🔌 API Endpoints
-
-### Authentication
-- `POST /api/signup` - Create new user
-- `POST /api/login` - Login user
-
-### Habits
-- `GET /api/habits` - Get all habits
-- `POST /api/habits` - Create habit
-- `PUT /api/habits/:id` - Update habit
-- `DELETE /api/habits/:id` - Delete habit
-- `POST /api/habits/:id/complete` - Mark habit complete
-
-### Tasks
-- `GET /api/tasks` - Get all tasks
-- `POST /api/tasks` - Create task
-- `PUT /api/tasks/:id` - Update task
-- `DELETE /api/tasks/:id` - Delete task
-- `POST /api/tasks/:id/complete` - Complete task
-
-### Goals
-- `GET /api/goals` - Get all goals
-- `POST /api/goals` - Create goal
-- `PUT /api/goals/:id` - Update goal
-- `DELETE /api/goals/:id` - Delete goal
-- `POST /api/goals/:id/progress` - Update progress
-
-### Analytics
-- `GET /api/analytics/summary` - Get summary stats
-- `GET /api/analytics/progress` - Get 30-day progress
-- `GET /api/analytics/streaks` - Get habit streaks
-- `GET /api/calendar-data` - Get calendar data
-- `GET /api/notifications` - Get notifications
-- `GET /api/profile` - Get user profile
-
-## 📊 Charts & Analytics
-
-All charts use **real data** from the PostgreSQL database via the Flask API:
-
-- **Dashboard**: Stats, weekly activity, 30-day progress, streaks
-- **Analytics**: Performance radar, trends, monthly summaries
-- **Real-time Updates**: All data fetches from API on component mount
-
-### Chart Libraries
-- **Recharts** - For all data visualizations
-- **React Router** - For navigation
-- **Lucide React** - For icons
-
-## 🚢 Deployment
-
-### Option 1: Vercel (Recommended)
-
-#### Backend
-Since Vercel doesn't support Python Flask directly, you'll need to deploy the backend separately:
-
-**Recommended: Railway, Render, or Heroku**
-
-```bash
-# Example for Railway
-railway init
-railway add
-railway up
-```
-
-#### Frontend
-```bash
-# Deploy to Vercel
-vercel
-```
-
-Update the `REACT_APP_API_URL` environment variable in Vercel to point to your deployed backend.
-
-### Option 2: Docker
-
-```dockerfile
-# Dockerfile for backend
-FROM python:3.11
-WORKDIR /app
-COPY backend/requirements.txt .
-RUN pip install -r requirements.txt
-COPY backend/ .
-CMD ["python", "app.py"]
-```
-
-```yaml
-# docker-compose.yml
-version: '3.8'
-services:
-  postgres:
-    image: postgres:14
-    environment:
-      POSTGRES_DB: habit_tracker
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-
-  backend:
-    build: .
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/habit_tracker
-    ports:
-      - "5000:5000"
-    depends_on:
-      - postgres
-```
-
-### Option 3: Traditional Hosting
-
-1. Set up a Linux server (Ubuntu 20.04+)
-2. Install PostgreSQL and Python
-3. Clone repository
-4. Follow setup instructions
-5. Use Nginx as reverse proxy
-6. Use PM2 or systemd for process management
-
-## 🔒 Security Notes
-
-- JWT tokens expire after 7 days
-- Passwords are hashed with bcrypt
-- All API routes (except auth) require authentication
-- CORS is configured for cross-origin requests
-- SQL injection protection via parameterized queries
-
-## 🎨 Design System
-
-### Colors
-- Primary Background: `#1a1f2e`
-- Card Background: `#222a3d`
-- Text Primary: `#dae2fd`
-- Text Secondary: `#c7c4d7`
-- Success/Green: `#4edea3`
-- Purple: `#c2c1ff`
-- Orange: `#ff9671`
-- Yellow: `#ffd93d`
-
-### Typography
-- Font Family: Inter
-- Headings: Bold
-- Body: Medium/Regular
-
-## 📝 Environment Variables
-
-### Backend (.env)
-```
-DATABASE_URL=postgresql://username:password@host:port/database
-JWT_SECRET=your-secret-key-here
-FLASK_ENV=development
-FLASK_DEBUG=True
-```
-
-### Frontend (.env)
-```
-REACT_APP_API_URL=http://localhost:5000
-```
-
-## 🧪 Testing
-
-```bash
-# Backend
-cd backend
-python -c "from db.connection import init_database; init_database()"
-
-# Create test user
-curl -X POST http://localhost:5000/api/signup \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"test123"}'
-```
-
-## 🐛 Troubleshooting
-
-### Database Connection Error
-- Ensure PostgreSQL is running: `pg_isready`
-- Check connection string in `.env`
-- Verify database exists: `psql -l`
-
-### CORS Error
-- Check backend CORS configuration in `app.py`
-- Verify frontend API URL is correct
-
-### Authentication Error
-- Clear localStorage and re-login
-- Check JWT secret is set in backend `.env`
-
-## 📄 License
-
-This project is for demonstration purposes. Feel free to use and modify for your own projects.
-
-## 🤝 Contributing
-
-This is a complete production-ready application. To add features:
-1. Add database migrations to `schema.sql`
-2. Create/update models in `backend/models/`
-3. Add API endpoints in `backend/app.py`
-4. Create/update React components in `src/app/`
-
-## 📞 Support
-
-For issues or questions:
-- Check the backend logs: `python app.py`
-- Check the browser console for frontend errors
-- Verify database schema is initialized
-- Ensure all environment variables are set correctly
+Most habit trackers just record what you did. HabitFlow tells you what to do next.
 
 ---
 
-Built with ❤️ using React, Python Flask, PostgreSQL, and Recharts
+## What it does
+
+- **Track habits** with daily check-ins, streaks, and a heatmap showing your consistency over time
+- **Manage tasks** with priorities, due dates, and a built-in focus timer (25-minute blocks)
+- **Set goals** and link your habits and tasks to them so progress feels connected
+- **Coach** — an AI feature that looks at your tasks, habits, and recent patterns, then suggests a realistic plan for today. It shows the reason behind every suggestion and never changes anything until you say so
+- **Analytics** with completion rates, productivity score, and weekly trends
+- **Calendar** to plan and schedule habits and tasks by date
+- **Notifications** for streaks, achievements, and reminders
+
+---
+
+## How to run it
+
+You need Node.js, Python 3.11+, and PostgreSQL installed.
+
+**1. Set up the database**
+
+Run the schema file to create all tables:
+
+```bash
+psql -U habitflow_user -d habitflow -f backend/db/schema.sql
+```
+
+On Windows, double-click `setup_db.bat` if you have `psql` in your PATH.
+
+**2. Set up environment variables**
+
+Edit `backend/.env`:
+
+```
+DATABASE_URL=postgresql://habitflow_user:yourpassword@localhost:5432/habitflow
+JWT_SECRET=any-long-random-string
+```
+
+To use a live AI model for the Coach feature, also add:
+
+```
+AI_GATEWAY_API_KEY=your-api-key
+AI_GATEWAY_BASE_URL=https://api.anthropic.com
+AI_MODEL=claude-haiku-4-5-20251001
+```
+
+Without an API key it runs in demo mode and returns a sample plan — good for testing without a subscription.
+
+**3. Start the app**
+
+Double-click `start.bat`. It opens two terminal windows — backend on port 5000, frontend on port 5173.
+
+Open [http://localhost:5173](http://localhost:5173) in your browser.
+
+---
+
+## Pages
+
+| Page | What it's for |
+|---|---|
+| Dashboard | Your daily overview — streak cards, completion chart, recent activity |
+| Actions | Your habits and tasks in one place |
+| Coach | Get a focused plan for today, a recovery plan when overloaded, or a weekly review |
+| Analytics | Charts showing your completion rate, trends, and productivity score |
+| Calendar | See and schedule habits and tasks by date |
+| Notifications | Streak alerts, achievement unlocks, and reminders |
+| Profile | Your stats, achievements, and rank |
+
+---
+
+## Tech stack
+
+| Layer | What's used |
+|---|---|
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, Radix UI, Recharts |
+| Backend | Python FastAPI, PostgreSQL, JWT auth, APScheduler |
+| AI (Coach) | Anthropic API (Claude Haiku) — falls back to demo mode if no key is set |
+
+---
+
+## How AI was used in this project
+
+This was built for a hackathon using two AI tools in different roles.
+
+### GPT-5.6 — product thinking and design
+
+GPT-5.6 shaped the Coach feature from scratch. I used it to:
+
+- Figure out what kind of AI feature would actually be useful in a habit tracker (not just a chatbot)
+- Design the three-mode structure: Today's Focus, Recovery Mode, Weekly Review
+- Define what "safe AI" means here — generation never changes data, everything requires user confirmation, every recommendation must show its reasoning
+- Write the prompt instructions that tell the model what to output and what rules to follow
+- Design the adaptive coaching approach — where the system learns from which suggestions you accepted or ignored over time, and adjusts future suggestions based on your patterns
+
+The implementation spec I worked from was produced through that conversation. Every key product decision — the confirmation step, the evidence panel, the cap at three recommendations — came from that back-and-forth.
+
+### Codex / Claude Code — building and testing
+
+Codex handled the coding:
+
+- Reviewed the full codebase and found the schema bug causing CORS errors (tasks table referenced goals before goals was defined)
+- Wrote all five Coach backend modules: schemas, context assembler, prompts, gateway, validator, apply service, overload detector
+- Wrote 41 automated tests covering the validation rules from the spec
+- Fixed the Pomodoro timer leak, goal priority undefined bug, and JWT session handling
+- Set up the `start.bat` and `setup_db.bat` scripts
+- Wired the Coach page into the React router and sidebar
+
+### What I built and decided myself
+
+- The full HabitFlow application — habits, tasks, goals, analytics, calendar, notifications, profile, achievements, email reports, heatmaps — built before the hackathon AI work started
+- The product direction: I chose a coaching feature over a chatbot or generic AI analytics
+- The decision to keep the AI read-only and require explicit confirmation before any change
+- Which ideas from GPT-5.6 to build and which to cut
+
+---
+
+## How the Coach feature works
+
+When you click "Get Today's Focus":
+
+1. The backend reads your open tasks, habits, streaks, calendar blocks, and recent stats from the database
+2. It checks if you're overloaded (too many tasks vs. available time, 3+ overdue items, or a low completion rate). If you are, it automatically switches to Recovery Mode
+3. It sends a summary of your day to the AI model — not raw database records, just the relevant fields
+4. It validates every suggestion the model returns before showing it to you. Anything scheduled in the past, after 17:30, overlapping an existing block, or referencing a task that doesn't exist gets removed
+5. It returns the validated plan with the reason and evidence for each suggestion
+
+When you confirm suggestions, only the ones you selected are sent to a separate endpoint that validates everything again before writing to the database. Nothing is ever changed automatically.
+
+---
+
+## Running the tests
+
+```bash
+cd backend
+.venv/Scripts/python -m pytest tests/coach/ -v
+```
+
+41 tests cover: context shape, all validation rules, endpoint auth, error handling, and the no-write guarantee.
+
+---
+
+## Deployment
+
+**Frontend (Netlify)**
+
+```bash
+npm run build
+# deploy the dist/ folder to Netlify
+```
+
+Set `VITE_API_URL=https://your-backend-url` as an environment variable in Netlify.
+
+**Backend (Render)**
+
+Deploy as a Python web service. Set all variables from `backend/.env` in the Render dashboard. Make sure `DATABASE_URL` points to a hosted PostgreSQL instance (Render or Supabase both work).
+
+---
+
+## Screenshots
+
+> Add screenshots of: login page, dashboard, Coach page with a recommendation open showing the evidence panel, the Confirm & Apply bar.
+
+---
+
+Built by Esegel Narib — Build Week hackathon, 2026.

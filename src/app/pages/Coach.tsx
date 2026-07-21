@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Brain, Zap, RefreshCw, CalendarDays, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Clock, Loader2, Info } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiService } from '../services/api';
+import { api } from '../services/api';
 
 // ---------------------------------------------------------------------------
 // Types (mirrors backend schemas)
@@ -264,7 +264,7 @@ export default function Coach() {
     setResponse(null);
     setSelected(new Set());
     try {
-      const data = await apiService.request<CoachResponse>('/api/coach/generate', {
+      const data = await api.request<CoachResponse>('/api/coach/generate', {
         method: 'POST',
         body: JSON.stringify({
           type: mode,
@@ -285,7 +285,7 @@ export default function Coach() {
     setApplying(true);
     try {
       const selectedRecs = response.recommendations.filter(r => selected.has(r.id));
-      await apiService.request('/api/coach/apply', {
+      await api.request('/api/coach/apply', {
         method: 'POST',
         body: JSON.stringify({
           recommendation_ids: Array.from(selected),

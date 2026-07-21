@@ -939,12 +939,12 @@ async def global_search(q: str = Query("", min_length=0), user_id: int = Depends
 
 def calculate_user_rank(completed_tasks: int) -> str:
     """Calculate user rank based on completed tasks"""
-    if completed_tasks >= 500: return "Expert"
-    if completed_tasks >= 250: return "Advanced"
-    if completed_tasks >= 100: return "Intermediate"
-    if completed_tasks >= 50: return "Intermediate"
-    if completed_tasks >= 10: return "Beginner"
-    return "New User"
+    if completed_tasks >= 500: return "On Fire"
+    if completed_tasks >= 250: return "In the Zone"
+    if completed_tasks >= 100: return "Getting Good"
+    if completed_tasks >= 50: return "Building Momentum"
+    if completed_tasks >= 10: return "Getting Started"
+    return "Just Starting"
 
 def build_scheduled_notification_datetime(scheduled_date: str, scheduled_time: Optional[str]):
     """Build a datetime for reminder notifications from planned date/time."""

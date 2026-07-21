@@ -55,7 +55,7 @@ export default function Navigation() {
           <img src="/src/assets/logo.png" alt="Logo" className="w-8 h-8 brightness-200 group-hover:scale-110 transition-transform" />
           <div className="flex flex-col">
             <h1 className="font-['Inter'] font-black text-[#ffffff] text-[18px] tracking-[0.1em] leading-none uppercase">HabitFlow</h1>
-            <p className="font-['Inter'] text-[#8b949e] text-[9px] mt-1 uppercase tracking-[0.15em] opacity-60">Habit Architect</p>
+            <p className="font-['Inter'] text-[#8b949e] text-[9px] mt-1 uppercase tracking-[0.15em] opacity-60">Build Better Habits</p>
           </div>
         </Link>
       </div>

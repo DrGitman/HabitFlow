@@ -54,7 +54,7 @@ export default function Signup() {
             <img src={logo} alt="HabitFlow" className="h-10 w-auto brightness-200" />
           </div>
           <h1 className="text-[#ffffff] text-[22px] font-black tracking-[0.2em] leading-none uppercase mb-2">HABITFLOW</h1>
-          <p className="text-[#8b949e] text-[11px] font-medium tracking-[0.1em] uppercase opacity-60">Habit Architect</p>
+          <p className="text-[#8b949e] text-[11px] font-medium tracking-[0.1em] uppercase opacity-60">Track. Improve. Stay consistent.</p>
         </div>
 
         {/* Card */}
