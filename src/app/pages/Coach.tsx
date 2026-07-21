@@ -465,13 +465,13 @@ export default function Coach() {
                 </div>
               )}
             </>
-          ) : (
+          ) : response.type !== 'weekly' ? (
             <div className="rounded-[16px] border border-[#ffffff0a] bg-[#0d1117] p-8 text-center">
               <RefreshCw className="w-8 h-8 text-[#8b949e] mx-auto mb-3 opacity-40" />
               <p className="text-[13px] text-[#8b949e]">No actionable recommendations right now.</p>
               <p className="text-[11px] text-[#8b949e]/50 mt-1">Check back once you've added tasks or habits.</p>
             </div>
-          )}
+          ) : null}
         </div>
       )}
 

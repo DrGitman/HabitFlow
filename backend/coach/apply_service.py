@@ -15,7 +15,8 @@ from coach.schemas import (
     Recommendation,
 )
 from coach.context_assembler import assemble_context
-from coach.validator import validate_draft, CoachDraft, CoachMode, CoachSummary
+from coach.schemas import CoachDraft, CoachMode, CoachSummary
+from coach.validator import validate_draft
 
 
 class ApplyResult:
