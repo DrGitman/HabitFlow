@@ -1,6 +1,16 @@
 """
-Coordinates: assemble context → detect overload → generate draft → validate → return response.
-No FastAPI or DB logic here — pure orchestration.
+Coach service — orchestrates the full plan generation pipeline.
+
+Flow:
+  1. Build a compact context snapshot from the user's live DB data
+  2. Run deterministic overload detection (no AI involved)
+  3. Auto-upgrade to Recovery Mode if the user is heavily overloaded
+  4. Send the context to the AI gateway and get a raw draft back
+  5. Validate every recommendation before it reaches the client
+  6. Return a clean CoachResponse with only safe, actionable suggestions
+
+Nothing here touches the database directly — that's handled by
+context_assembler.py and apply_service.py respectively.
 """
 from __future__ import annotations
 

@@ -1,8 +1,19 @@
 """
-AI Gateway — the only module that knows the model name, provider URL, or SDK.
-Uses the OpenAI-compatible /v1/chat/completions format, which works with:
-  Mistral AI, Groq, OpenRouter, GitHub Models, Cerebras, SambaNova, and others.
-Switch providers by changing AI_GATEWAY_BASE_URL + AI_GATEWAY_API_KEY + AI_MODEL in .env.
+AI Gateway — single point of contact between HabitFlow and the language model.
+
+Keeps all provider-specific details (URL, auth format, model name) in one place
+so nothing else in the codebase knows which model is running.
+
+Uses the OpenAI-compatible /v1/chat/completions format, supported by:
+  Groq, Mistral AI, OpenRouter, GitHub Models, Cerebras, SambaNova, and others.
+
+To swap providers, change three lines in backend/.env:
+  AI_GATEWAY_API_KEY  — your API key for the new provider
+  AI_GATEWAY_BASE_URL — e.g. https://api.groq.com/openai/v1
+  AI_MODEL            — e.g. llama-3.3-70b-versatile
+
+If AI_GATEWAY_API_KEY is empty, FallbackGateway returns a deterministic demo
+response so the rest of the app stays testable without a live API key.
 """
 from __future__ import annotations
 

@@ -1,5 +1,21 @@
 import { useState } from 'react';
-import { Brain, Zap, RefreshCw, CalendarDays, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Clock, Loader2, Info } from 'lucide-react';
+/**
+ * Coach page — AI-powered daily planning assistant.
+ *
+ * Three modes:
+ *   Today's Focus  — picks the 3 most important things to do today
+ *   Recovery       — reduces load when the user is overloaded
+ *   Weekly Review  — reflects on last week and suggests one small adjustment
+ *
+ * How it works:
+ *   1. POST /api/coach/generate — read-only, never touches the DB
+ *   2. User selects which suggestions to apply
+ *   3. POST /api/coach/apply  — re-validates then writes selected items
+ *
+ * Nothing changes until the user explicitly confirms. Every recommendation
+ * shows the reasoning and evidence behind it.
+ */
+import { Brain, Zap, CalendarDays, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Clock, Loader2, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../services/api';
 
@@ -250,7 +266,6 @@ export default function Coach() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState(false);
-  const [cooldown, setCooldown] = useState(0); // seconds remaining before next generate
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -260,18 +275,7 @@ export default function Coach() {
     });
   };
 
-  const startCooldown = (seconds: number) => {
-    setCooldown(seconds);
-    const tick = setInterval(() => {
-      setCooldown(prev => {
-        if (prev <= 1) { clearInterval(tick); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
   const generate = async () => {
-    if (cooldown > 0) return;
     setLoading(true);
     setResponse(null);
     setSelected(new Set());
@@ -285,20 +289,15 @@ export default function Coach() {
         }),
       });
       setResponse(data);
-      startCooldown(90); // 90s cooldown after success — well within free tier limits
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Coach unavailable. Try again.';
-      if (msg.includes('429') || msg.includes('rate limit')) {
-        toast.error('Rate limit hit. Waiting 60 seconds before you can try again.');
-        startCooldown(60);
-      } else {
-        toast.error(msg);
-      }
+      toast.error(err instanceof Error ? err.message : 'Coach unavailable. Try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  // Sends only the user-selected recommendations to the apply endpoint.
+  // The backend re-validates every action before writing anything to the DB.
   const applySelected = async () => {
     if (!response || selected.size === 0) return;
     setApplying(true);
@@ -356,14 +355,12 @@ export default function Coach() {
       {/* Generate button */}
       <button
         onClick={generate}
-        disabled={loading || cooldown > 0}
+        disabled={loading}
         className="w-full flex items-center justify-center gap-2 py-4 rounded-[14px] bg-gradient-to-r from-[#8e8cf7] to-[#6d69f0] hover:from-[#7c79ff] hover:to-[#524eff] text-white font-black uppercase tracking-widest text-[12px] transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_8px_24px_rgba(124,121,255,0.15)] mb-8"
       >
         {loading
           ? <><Loader2 className="w-4 h-4 animate-spin" /> Thinking...</>
-          : cooldown > 0
-            ? <><Clock className="w-4 h-4" /> Ready in {cooldown}s</>
-            : <><Brain className="w-4 h-4" /> Get {mode === 'daily' ? "Today's Focus" : mode === 'recovery' ? 'Recovery Plan' : 'Weekly Review'}</>
+          : <><Brain className="w-4 h-4" /> Get {mode === 'daily' ? "Today's Focus" : mode === 'recovery' ? 'Recovery Plan' : 'Weekly Review'}</>
         }
       </button>
 

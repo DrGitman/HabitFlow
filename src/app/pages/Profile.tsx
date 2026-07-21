@@ -3,22 +3,24 @@ import { useLocation } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { toast } from 'sonner';
-import { 
-  User as UserIcon, 
-  Mail, 
-  Globe, 
-  Activity, 
-  Award, 
-  Cpu, 
-  Flame, 
-  CheckCircle2, 
-  Zap, 
+import {
+  User as UserIcon,
+  Mail,
+  Globe,
+  Activity,
+  Award,
+  Cpu,
+  Flame,
+  CheckCircle2,
+  Zap,
   Trophy,
   Pencil,
   Save,
   Loader2,
   Lock,
   X,
+  Target,
+  Shield,
   MoreHorizontal,
   ChevronRight
 } from 'lucide-react';
@@ -76,7 +78,8 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [prefs, setPrefs] = useState<any>(null);
-  
+  const [currentStreak, setCurrentStreak] = useState(0);
+
   // Modals state
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isAchievementsModalOpen, setIsAchievementsModalOpen] = useState(false);
@@ -110,51 +113,44 @@ export default function Profile() {
   const fetchProfileData = async () => {
     try {
       setLoading(true);
-      const [profileRes, summaryRes, achievementsRes, prefsRes] = await Promise.all([
+      const [profileRes, summaryRes, achievementsRes, prefsRes, streaksRes] = await Promise.all([
         api.getProfile(),
         api.getAnalyticsSummary(),
         api.getAchievements(),
-        api.getUserPreferences()
+        api.getUserPreferences(),
+        api.getAnalyticsStreaks(),
       ]);
 
-      console.log('Profile API Response:', profileRes);
-      console.log('User from Auth:', user);
-      
       setPrefs(prefsRes);
-      
-      // The API returns the full user profile with all fields
+
+      // Prefer the API profile; fall back to the cached auth user if needed
       const prof = profileRes as UserProfile | null;
-      
-      // Always use the API response if we got it, don't fall back to auth user
       if (prof && prof.id) {
-        console.log('Setting profile from API:', prof);
         setProfile(prof);
         setDisplayName(prof.full_name || '');
         setEmail(prof.email || '');
         setAvatarPreview(null);
       } else if (user) {
-        // Only fall back to auth user as last resort
-        console.log('Setting profile from auth user (API returned null):', user);
-        setProfile({
-          id: user.id,
-          email: user.email,
-          full_name: user.full_name,
-          avatar_url: user.avatar_url,
-          rank: user.rank
-        } as UserProfile);
+        setProfile({ id: user.id, email: user.email, full_name: user.full_name, avatar_url: user.avatar_url, rank: user.rank } as UserProfile);
         setDisplayName(user.full_name || '');
         setEmail(user.email || '');
         setAvatarPreview(null);
       } else {
-        console.warn('No profile data available');
         setProfile(null);
         setDisplayName('');
         setEmail('');
         setAvatarPreview(null);
       }
-      
+
       setSummary(summaryRes as AnalyticsSummary);
       setAchievements(achievementsRes as Achievement[]);
+
+      // Derive the best active streak across all habits
+      const streaks = streaksRes as any[];
+      const best = Array.isArray(streaks)
+        ? Math.max(0, ...streaks.map((s: any) => s.current_streak ?? s.streak ?? 0))
+        : 0;
+      setCurrentStreak(best);
     } catch (error) {
       console.error('Error fetching profile data:', error);
       // Try to initialize from localStorage as fallback
@@ -273,7 +269,6 @@ export default function Profile() {
   return (
     <div className="p-10 max-w-[1200px] mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700 font-['Inter']">
       
-      {/* 3. REMOVE DUPLICATE HEADER ICONS (Done: Removed top div) */}
       <h2 className="text-[#ffffff] text-[14px] font-black tracking-[0.2em] uppercase opacity-70 mb-2">My Profile</h2>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -284,7 +279,6 @@ export default function Profile() {
           </div>
           
           <div className="flex flex-col md:flex-row items-center md:items-start gap-8 relative z-10">
-            {/* 5. PROFILE PICTURE FIX (Upload logic) */}
             <div className="relative">
               <div className="w-32 h-32 rounded-[32px] bg-[#161b22] border border-[#ffffff0a] flex items-center justify-center overflow-hidden shadow-[0_20px_40px_rgba(0,0,0,0.4)] transition-transform group-hover:scale-105 duration-500">
                 {avatarPreview ? (
@@ -314,7 +308,7 @@ export default function Profile() {
             <div className="flex-1 text-center md:text-left space-y-6">
               <div>
                 <span className="inline-flex items-center rounded-full border border-[#7c79ff]/30 bg-[#7c79ff]/10 px-2.5 py-1 text-[#a5b4fc] text-[10px] font-black uppercase tracking-[0.16em] mb-2">
-                  {prefs?.privacy_show_rank === false ? 'Rank private' : (profile?.rank || 'Beginner')}
+                  {prefs?.profile_visibility === 'private' ? 'Rank private' : (profile?.rank || 'Getting Started')}
                 </span>
                 <h1 className="text-[#ffffff] text-[32px] font-black tracking-tight leading-none">{profile?.full_name || 'System User'}</h1>
                 <p className="text-[#8b949e] text-[13px] mt-1 font-medium">{profile?.email}</p>
@@ -341,7 +335,6 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* 6. PROFILE UPDATE FIX (Editable fields) */}
         <div className="bg-[#11141d] border border-[#ffffff0a] rounded-[24px] p-8">
           <div className="flex items-center gap-3 mb-8">
             <div className="p-2 rounded-[10px] bg-[#7c79ff]/10 border border-[#7c79ff]/20">
@@ -379,7 +372,6 @@ export default function Profile() {
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4" /> Save Changes</>}
               </button>
 
-              {/* 4. PASSWORD CHANGE FEATURE */}
               <button
                 type="button"
                 onClick={() => setIsPasswordModalOpen(true)}
@@ -392,7 +384,6 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* 1. PERSONAL ACHIEVEMENTS (REMOVE HARDCODE) */}
       <div className="space-y-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4 flex-1">
@@ -460,7 +451,7 @@ export default function Profile() {
                       {achievement.desc}
                     </p>
 
-                    {/* Performance Progress Bar (Visual Mock) */}
+                    {/* Completion bar — always full since only unlocked achievements are shown */}
                     <div className="space-y-2">
                        <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-[#8b949e] opacity-40">
                          <span>Affinity</span>
@@ -504,7 +495,7 @@ export default function Profile() {
            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[1px] h-16 bg-[#ffffff1a] hidden md:block" />
         </div>
         <div className="flex-1 flex flex-col items-center justify-center text-center group">
-           <span className="text-[64px] font-bold text-[#e6edf3] tracking-tight leading-none transition-transform duration-500">{summary?.completed_tasks && summary.completed_tasks > 0 ? 14 : 0}</span>
+           <span className="text-[64px] font-bold text-[#e6edf3] tracking-tight leading-none transition-transform duration-500">{currentStreak}</span>
            <p className="text-[#8b949e] text-[11px] font-bold uppercase tracking-[0.2em] mt-3 opacity-80">Current Streak</p>
         </div>
       </div>

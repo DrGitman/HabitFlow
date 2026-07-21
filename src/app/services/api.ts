@@ -1,11 +1,15 @@
 /**
- * API Service for Habit Tracker
- * Connects to FastAPI backend
+ * Central API client for HabitFlow.
+ *
+ * All backend communication goes through the `api` singleton at the bottom
+ * of this file. Components should import that instance — never call fetch
+ * directly. This keeps auth headers, error handling, and the base URL
+ * in one place.
+ *
+ * Base URL comes from the VITE_API_URL environment variable so the same
+ * build can point at localhost during development and a hosted backend
+ * after deployment. Set it in Netlify's environment variable dashboard.
  */
-
-// Replace with your actual backend URL
-// For local development: http://localhost:5000
-// For production: your deployed backend URL
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 interface RequestOptions extends RequestInit {

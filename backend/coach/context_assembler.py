@@ -1,6 +1,18 @@
 """
-Assembles a compact, model-safe context snapshot from HabitFlow's database.
-No raw DB rows leave this module — only normalized, ID-stable fields.
+Context assembler — builds the snapshot sent to the AI model.
+
+Reads live data from the database and produces a CoachContext with only the
+fields the model needs: open tasks (sorted by priority), active habits with
+streaks, today's calendar blocks, recent 7-day performance stats, and the
+last 14 days of recommendation outcomes so the model can adapt to patterns.
+
+Key design decisions:
+  - IDs are prefixed (task_42, habit_12) so the model can reference them
+    unambiguously and the validator can match them back to real DB rows.
+  - Raw DB rows never leave this module — only typed Pydantic objects.
+  - Current time is injected as a scheduling constraint so the model
+    never proposes blocks that have already passed.
+  - Weekly mode gets extra habit completion stats for the past 7 days.
 """
 from __future__ import annotations
 
@@ -174,6 +186,10 @@ def assemble_context(user_id: int, target_date: str) -> CoachContext:
     # --- Recommendation history ---
     history = _assemble_history(user_id)
 
+    now = datetime.now()
+    current_time_str = now.strftime("%H:%M")
+    earliest_start = (now + timedelta(minutes=15)).strftime("%H:%M")
+
     return CoachContext(
         date=target_date,
         available_minutes=available_minutes,
@@ -183,9 +199,11 @@ def assemble_context(user_id: int, target_date: str) -> CoachContext:
         recent_performance=perf,
         calendar_blocks=calendar_blocks,
         constraints=[
+            f"Current time is {current_time_str}. Do not schedule anything before {earliest_start}.",
             "Do not schedule beyond 17:30",
             "Keep at least 15 minutes between focus blocks",
             "Cap Today's Focus at three primary recommendations",
+            "Use the habit name (not the habit ID) as the recommendation title",
         ],
         recommendation_history=history,
     )

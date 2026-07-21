@@ -1,6 +1,17 @@
 """
-Validates the model draft before it reaches the client.
-All checks are deterministic — no model calls here.
+Validator — runs every model recommendation through a set of hard rules
+before anything is shown to the user or written to the database.
+
+Rules enforced here (in order):
+  - kind and action type must be from the allowed lists
+  - actionable recommendations need a reason, evidence, and non-zero confidence
+  - referenced task/habit IDs must exist in the assembled context
+  - calendar blocks can't be in the past, on the wrong date, past 17:30,
+    overlapping an existing block, or exceeding the user's available minutes
+
+Recommendations that fail any check are silently dropped and a warning is
+added to the response so the UI can surface it. Nothing is ever written to
+the DB from here — that's apply_service.py's job, and it re-validates anyway.
 """
 from __future__ import annotations
 
