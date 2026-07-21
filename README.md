@@ -1,5 +1,7 @@
 # HabitFlow
 
+**Live app: [https://habitflow21.netlify.app](https://habitflow21.netlify.app)**
+
 HabitFlow helps you build better habits, finish your tasks, and hit your goals — with an AI coach that tells you what to focus on today and why.
 
 Most habit trackers just record what you did. HabitFlow tells you what to do next.
@@ -146,18 +148,44 @@ cd backend
 
 ## Deployment
 
-**Frontend (Netlify)**
+### Database — Neon (free PostgreSQL, no expiry)
 
-```bash
-npm run build
-# deploy the dist/ folder to Netlify
-```
+1. Go to [neon.tech](https://neon.tech) → create a free account and a new project
+2. Copy the **Connection string** from the dashboard (looks like `postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require`)
+3. Open the **SQL Editor** tab, paste `backend/db/schema.sql`, and run it to create all tables
 
-Set `VITE_API_URL=https://your-backend-url` as an environment variable in Netlify.
+### Backend — Render (free Python web service)
 
-**Backend (Render)**
+1. Go to [render.com](https://render.com) → sign in with GitHub → **New → Web Service**
+2. Connect your repo and set:
+   - **Root Directory:** `backend`
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `uvicorn main:app --host 0.0.0.0 --port $PORT`
+3. Add these **Environment Variables** in the Render dashboard:
 
-Deploy as a Python web service. Set all variables from `backend/.env` in the Render dashboard. Make sure `DATABASE_URL` points to a hosted PostgreSQL instance (Render or Supabase both work).
+   | Key | Value |
+   |-----|-------|
+   | `DATABASE_URL` | your Neon connection string |
+   | `JWT_SECRET` | any long random string |
+   | `AI_GATEWAY_API_KEY` | your Groq API key |
+   | `AI_GATEWAY_BASE_URL` | `https://api.groq.com/openai/v1` |
+   | `AI_MODEL` | `llama-3.3-70b-versatile` |
+
+4. Deploy — Render gives you a URL like `https://your-app.onrender.com`
+
+> Free Render services sleep after 15 min of inactivity. The first request after idle takes ~30s to wake up.
+
+### Frontend — connect to hosted backend
+
+1. In Netlify: **Site configuration → Environment variables** → add `VITE_API_URL` = your Render URL
+2. In `backend/main.py`, add your Netlify domain to `allow_origins`:
+   ```python
+   allow_origins=[
+       "http://localhost:5173",
+       "https://habitflow21.netlify.app",
+   ],
+   ```
+3. Commit, push, and redeploy both services
 
 ---
 
